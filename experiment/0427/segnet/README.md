@@ -1,1 +1,3 @@
 # Segnet
+
+### backbone: vgg16 
