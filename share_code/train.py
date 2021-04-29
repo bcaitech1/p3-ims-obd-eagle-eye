@@ -12,19 +12,21 @@ from torch import nn, optim
 from config import get_args
 from dataset import get_dataloader
 from loss import create_criterion
+from optimizer import create_optimizer
+from scheduler import create_scheduler
 from model import get_model
 from utils import seed_everything, label_accuracy_score, add_hist
 from evaluation import save_model
 
-WANDB = False
+WANDB = True
 
-def train(args, model, criterion, optimizer, dataloader):
+def train(args,epoch,num_epochs, model, criterion, optimizer, dataloader,scheduler=None):
     model.train()
     epoch_loss = 0
-    labels = torch.tensor([]).to(args.device)
-    preds = torch.tensor([]).to(args.device)
+    # labels = torch.tensor([]).to(args.device)
+    # preds = torch.tensor([]).to(args.device)
 
-    for images, masks, _ in dataloader:
+    for step,(images, masks, _) in enumerate(dataloader) :
         optimizer.zero_grad()
 
         images = torch.stack(images)       # (batch, channel, height, width)
@@ -33,15 +35,18 @@ def train(args, model, criterion, optimizer, dataloader):
         images, masks = images.to(args.device), masks.to(args.device)
                 
         outputs = model(images)
-        
         loss = criterion(outputs, masks)
 
         loss.backward()
 
         optimizer.step()
-
+        if (step + 1) % 25 == 0:
+            current_lr = get_lr(optimizer)
+            print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f} lr: {}'.format(
+                    epoch+1, num_epochs, step+1, len(dataloader), loss.item(),current_lr))
         epoch_loss += loss
-        
+    if scheduler:
+        scheduler.step()
     return (epoch_loss / len(dataloader))
 
 
@@ -71,17 +76,17 @@ def evaluate(args, model, criterion, dataloader):
     return (epoch_loss / len(dataloader)), mIoU
 
 
-def run(args, model, criterion, optimizer, dataloader):
+def run(args, model, criterion, optimizer, dataloader,scheduler=None):
     best_valid_loss = float("inf")
 
     train_loader, val_loader = dataloader
 
     for epoch in range(args.EPOCHS):
 
-        train_loss = train(args, model, criterion, optimizer, train_loader)
+        train_loss = train(args,epoch,args.EPOCHS, model, criterion, optimizer, train_loader,scheduler)
 
         valid_loss, mIoU_score = evaluate(args, model, criterion, val_loader)
-
+        
         if WANDB:
             wandb.log({
                 "train_loss": train_loss, 
@@ -102,7 +107,10 @@ def main(args):
     seed_everything(21)
     if WANDB:
         wandb.init(project="stage-3", reinit=True)
-        wandb.run.name = args.MODEL
+        if args.ENCODER:
+            wandb.run.name = args.MODEL +'_' +args.ENCODER
+        else:
+            wandb.run.name = args.MODEL
         wandb.config.update(args)
 
         args = wandb.config
@@ -110,19 +118,25 @@ def main(args):
     dataloader = get_dataloader(args.BATCH_SIZE)
     print("Get loader")
 
-    model = get_model(args.MODEL).to(args.device)
+    model = get_model(args.MODEL,args.ENCODER).to(args.device)
     print("Load model")
 
     if WANDB:
         wandb.watch(model)
 
     criterion = create_criterion(args.LOSS)
-    optimizer = optim.Adam(params = model.parameters(), lr = args.LEARNING_RATE, weight_decay=1e-6)
+    optimizer = create_optimizer(args.OPTIMIZER,model,args.LEARNING_RATE)
+    if args.SCHEDULER:
+        scheduler = create_scheduler(args.SCHEDULER,optimizer)
+    else:
+        scheduler = None
+    # optimizer = optim.Adam(params = model.parameters(), lr = args.LEARNING_RATE, weight_decay=1e-6)
     
     print("Run")
-    run(args, model, criterion, optimizer, dataloader)
-
-
+    run(args, model, criterion, optimizer ,dataloader,scheduler)
+def get_lr(optimizer):
+    for param_group in optimizer.param_groups:
+        return param_group['lr']
 if __name__ == "__main__":
     args = get_args()
     torch.cuda.empty_cache()
