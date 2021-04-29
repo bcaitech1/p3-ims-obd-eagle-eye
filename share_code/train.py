@@ -18,13 +18,13 @@ from model import get_model
 from utils import seed_everything, label_accuracy_score, add_hist
 from evaluation import save_model
 
-WANDB = True
+WANDB = False
 
-def train(args,epoch,num_epochs, model, criterion, optimizer,scheduler, dataloader):
+def train(args,epoch,num_epochs, model, criterion, optimizer, dataloader,scheduler=None):
     model.train()
     epoch_loss = 0
-    labels = torch.tensor([]).to(args.device)
-    preds = torch.tensor([]).to(args.device)
+    # labels = torch.tensor([]).to(args.device)
+    # preds = torch.tensor([]).to(args.device)
 
     for step,(images, masks, _) in enumerate(dataloader) :
         optimizer.zero_grad()
@@ -41,11 +41,12 @@ def train(args,epoch,num_epochs, model, criterion, optimizer,scheduler, dataload
 
         optimizer.step()
         if (step + 1) % 25 == 0:
-            current_lr = scheduler.get_last_lr()
+            current_lr = get_lr(optimizer)
             print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f} lr: {}'.format(
                     epoch+1, num_epochs, step+1, len(dataloader), loss.item(),current_lr))
         epoch_loss += loss
-    scheduler.step()
+    if scheduler:
+        scheduler.step()
     return (epoch_loss / len(dataloader))
 
 
@@ -130,7 +131,9 @@ def main(args):
     
     print("Run")
     run(args, model, criterion, optimizer,scheduler, dataloader)
-
+def get_lr(optimizer):
+    for param_group in optimizer.param_groups:
+        return param_group['lr']
 if __name__ == "__main__":
     args = get_args()
     torch.cuda.empty_cache()
