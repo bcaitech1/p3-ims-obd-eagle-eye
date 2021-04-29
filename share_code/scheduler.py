@@ -14,7 +14,7 @@ def create_scheduler(scheduler_name,optimizer):
     
     create_fn = scheduler_entrypoint(scheduler_name)
     if scheduler_name=='step_lr':
-        scheduler = create_fn(optimizer,step=5, gamma=0.5)
+        scheduler = create_fn(optimizer,step_size=5, gamma=0.5)
     elif scheduler_name=='Reduce_lr':
         scheduler = create_fn(optimizer,factor=0.1, patience=10)
     elif scheduler_name=='cosine_lr':
