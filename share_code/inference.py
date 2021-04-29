@@ -61,14 +61,14 @@ if __name__ == "__main__":
     print("Start")
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    # sample_submisson.csv 열기
-    submission = pd.read_csv('/opt/ml/code/submission/sample_submission.csv', index_col=None)
-
     test_loader = get_testloader()
 
     model_paths = os.listdir("/opt/ml/code/saved")
 
     for mp in model_paths:
+        # sample_submisson.csv 열기
+        submission = pd.read_csv('/opt/ml/code/submission/sample_submission.csv', index_col=None)
+        
         if mp.endswith(".pt"):
             model = load_model(mp, device)
             model.to(device)
