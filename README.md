@@ -2,9 +2,9 @@
     <img src="logo.png" alt="logo"/>
 </div>
 
-## 👉 [ISSUE](https://github.com/bcaitech1/p3-ims-obd-eagle-eye/issues)
+## 👉 [Discussions](https://github.com/bcaitech1/p3-ims-obd-eagle-eye/discussions)
 
-피어세션 기록 및 질문은 Issue에 저장합니다!
+피어세션 기록 및 질문은 Discussions에 저장합니다!
 
 ---
 
@@ -18,9 +18,15 @@
 ## 📁 폴더 구조
 
 ```
-├── code            # 베이스라인 코드
-└── experiment      # 실험/데일리미션 코드
-    └── 0427        # 4월 27일 실험: 여러 segmentation 모델 구현
+├── baseline        # 베이스라인 코드
+├── code            # 학습 python 파일
+└── experiment      # 팀원별 실험코드
+    ├── arm         
+    ├── bsoomin    
+    ├── jaehyuk    
+    ├── jiyoung     
+    ├── jsj
+    └── sohyun
 ```
 
 ---
