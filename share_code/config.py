@@ -27,7 +27,7 @@ def get_args():
     args.device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
     os.makedirs(args.MODEL_PATH, exist_ok=True)
-    if args.ENCODER is None:
+    if not args.ENCODER:
         MODEL_PATH = os.path.join(args.MODEL_PATH, (args.MODEL))
     else:
         MODEL_PATH = os.path.join(args.MODEL_PATH, (args.MODEL+'_' + args.ENCODER))
