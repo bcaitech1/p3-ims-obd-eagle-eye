@@ -1,5 +1,6 @@
 import os
-import tqdm
+from tqdm import tqdm
+import argparse
 
 import torch
 import numpy as np
@@ -9,20 +10,18 @@ import albumentations as A
 from dataset import get_testloader
 from model import get_model
 
-
-def load_model(model_name: str, device):
-    base = model_name.split("_")[0]
-    model = get_model(base)
-    model_path = f"/opt/ml/code/saved/{model_name}"
+def load_model(args, device):
+    model = get_model(args.model,args.encoder)
+    model_path = args.model_dir
 
     checkpoint = torch.load(model_path, map_location=device)
     model.load_state_dict(checkpoint)
-    print(f"Loaded model:{model_name}")
+    print(f"Loaded model:{args.model}")
 
     return model
 
 
-def test(model, data_loader, device):
+def test(model, test_loader, device):
     size = 256
     transform = A.Compose([A.Resize(256, 256)])
     print('Start prediction.')
@@ -32,7 +31,7 @@ def test(model, data_loader, device):
     preds_array = np.empty((0, size*size), dtype=np.long)
     
     with torch.no_grad():
-        for step, (imgs, image_infos) in enumerate(test_loader):
+        for  imgs, image_infos in tqdm(test_loader):
 
             # inference (512 x 512)
             outs = model(torch.stack(imgs).to(device))
@@ -58,6 +57,18 @@ def test(model, data_loader, device):
 
 
 if __name__ == "__main__":
+
+
+    parser = argparse.ArgumentParser()
+
+    ### 데이터 증강은 추후 dataset.py 수정등 할일이 있어 추후 update 예정
+    # parser.add_argument('--augmentation', type=str, default=None, help='augmentation')
+    parser.add_argument('--model', type=str, default='DeepLabV3Plus', help='model type (default: BaseModel)')
+    parser.add_argument('--encoder', type=str, default=None, help='model type (default: BaseModel)')
+    parser.add_argument('--model_dir', type=str, default= './saved/efficientnet-b4DeepLabV3Plus_efficientnet-b4_DeepLabV3Plus.pt')
+    parser.add_argument('--output_dir', type=str, default='./output')
+    args = parser.parse_args()
+
     print("Start")
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -65,24 +76,22 @@ if __name__ == "__main__":
     submission = pd.read_csv('/opt/ml/code/submission/sample_submission.csv', index_col=None)
 
     test_loader = get_testloader()
+    # 예시
+    # test_loader = get_testloader(augmentation=args.augmentation)
 
-    model_paths = os.listdir("/opt/ml/code/saved")
+    model = load_model(args,device)
+    model.to(device)
+    file_names, preds = test(model, test_loader, device)
+    
 
-    for mp in model_paths:
-        if mp.endswith(".pt"):
-            model = load_model(mp, device)
-            model.to(device)
+    # PredictionString 대입
+    for file_name, string in zip(file_names, preds):
+        submission = submission.append({
+            "image_id" : file_name, 
+            "PredictionString" : ' '.join(str(e) for e in string.tolist()
+            )}, ignore_index=True)
 
-            # test set에 대한 prediction
-            file_names, preds = test(model, test_loader, device)
-
-            # PredictionString 대입
-            for file_name, string in zip(file_names, preds):
-                submission = submission.append({
-                    "image_id" : file_name, 
-                    "PredictionString" : ' '.join(str(e) for e in string.tolist()
-                    )}, ignore_index=True)
-
-            submission_name = mp[:-3]
-            submission.to_csv(f"/opt/ml/code/submission/{submission_name}.csv", index=False)
+    os.makedirs(args.output_dir, exist_ok=True)
+    # submission.to_csv(os.path.join(args.output_dir, f'output_{args.model}.csv'), index=False)
+    submission.to_csv(os.path.join(args.output_dir, f'output.csv'), index=False)
     print("Finish")
