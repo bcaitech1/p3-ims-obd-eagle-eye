@@ -4,15 +4,23 @@ import torch.optim as optim
 
 from torchvision import models
 from torchvision.models import vgg16
+from models import UNet_3Plus
 
 
-def get_model(model_name):
-    if model_name == 'fcn8':
-        model = FCN8s(num_classes=12)
-
-    if model_name == 'segnet':
-        model = SegNet()
-
+import segmentation_models_pytorch as smp
+def get_model(model,encoder=None):
+    if model == 'unet3p':
+        model=UNet_3Plus.UNet_3Plus(n_classes=12)
+    # elif model=='FCN8s':
+    # elif model=='FCN8s':
+    else:
+        decoder_model=getattr(smp,model)
+        model=decoder_model(
+            encoder_name=encoder,
+            encoder_weights="imagenet",
+            in_channels=3, 
+            classes=12,
+        )
     return model
 
 
@@ -231,7 +239,6 @@ class SegNet(nn.Module):
         out = self.score_fr(h) 
         
         return out
-
 
 
 
