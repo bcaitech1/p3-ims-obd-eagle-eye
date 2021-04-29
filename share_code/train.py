@@ -76,14 +76,14 @@ def evaluate(args, model, criterion, dataloader):
     return (epoch_loss / len(dataloader)), mIoU
 
 
-def run(args, model, criterion, optimizer,scheduler, dataloader):
+def run(args, model, criterion, optimizer, dataloader,scheduler=None):
     best_valid_loss = float("inf")
 
     train_loader, val_loader = dataloader
 
     for epoch in range(args.EPOCHS):
 
-        train_loss = train(args,epoch,args.EPOCHS, model, criterion, optimizer,scheduler, train_loader)
+        train_loss = train(args,epoch,args.EPOCHS, model, criterion, optimizer, train_loader,scheduler)
 
         valid_loss, mIoU_score = evaluate(args, model, criterion, val_loader)
         
@@ -126,11 +126,14 @@ def main(args):
 
     criterion = create_criterion(args.LOSS)
     optimizer = create_optimizer(args.OPTIMIZER,model,args.LEARNING_RATE)
-    scheduler = create_scheduler(args.SCHEDULER,optimizer)
+    if args.SCHEDULER:
+        scheduler = create_scheduler(args.SCHEDULER,optimizer)
+    else:
+        scheduler = None
     # optimizer = optim.Adam(params = model.parameters(), lr = args.LEARNING_RATE, weight_decay=1e-6)
     
     print("Run")
-    run(args, model, criterion, optimizer,scheduler, dataloader)
+    run(args, model, criterion, optimizer ,dataloader,scheduler)
 def get_lr(optimizer):
     for param_group in optimizer.param_groups:
         return param_group['lr']
