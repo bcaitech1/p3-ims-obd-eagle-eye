@@ -80,7 +80,7 @@ if __name__ == "__main__":
     # test_loader = get_testloader(augmentation=args.augmentation)
 
     model = load_model(args,device)
-    model.to(device)
+    model = model.to(device)
     file_names, preds = test(model, test_loader, device)
     
 

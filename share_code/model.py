@@ -9,11 +9,7 @@ from unet_models import UNet_3Plus
 
 import segmentation_models_pytorch as smp
 def get_model(model,encoder=None):
-    if model == 'unet3p':
-        model=UNet_3Plus.UNet_3Plus(n_classes=12)
-    # elif model=='FCN8s':
-    # elif model=='FCN8s':
-    else:
+    if encoder:
         decoder_model=getattr(smp,model)
         model=decoder_model(
             encoder_name=encoder,
@@ -21,6 +17,9 @@ def get_model(model,encoder=None):
             in_channels=3, 
             classes=12,
         )
+    else:
+        if model == 'unet3p':
+            model=UNet_3Plus.UNet_3Plus(n_classes=12)
     return model
 
 
