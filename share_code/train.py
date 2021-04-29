@@ -41,7 +41,7 @@ def train(args,epoch,num_epochs, model, criterion, optimizer,scheduler, dataload
 
         optimizer.step()
         if (step + 1) % 25 == 0:
-            current_lr = get_lr(optimizer)
+            current_lr = scheduler.get_last_lr()
             print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f} lr: {}'.format(
                     epoch+1, num_epochs, step+1, len(dataloader), loss.item(),current_lr))
         epoch_loss += loss
@@ -85,7 +85,7 @@ def run(args, model, criterion, optimizer,scheduler, dataloader):
         train_loss = train(args,epoch,args.EPOCHS, model, criterion, optimizer,scheduler, train_loader)
 
         valid_loss, mIoU_score = evaluate(args, model, criterion, val_loader)
-
+        
         if WANDB:
             wandb.log({
                 "train_loss": train_loss, 
@@ -131,11 +131,6 @@ def main(args):
     print("Run")
     run(args, model, criterion, optimizer,scheduler, dataloader)
 
-# def get_args(args):
-#     return args
-def get_lr(optimizer):
-    for param_group in optimizer.param_groups:
-        return param_group['lr']
 if __name__ == "__main__":
     args = get_args()
     torch.cuda.empty_cache()

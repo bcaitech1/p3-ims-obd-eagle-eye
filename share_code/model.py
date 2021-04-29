@@ -4,7 +4,7 @@ import torch.optim as optim
 
 from torchvision import models
 from torchvision.models import vgg16
-from models import UNet_3Plus
+from unet_models import UNet_3Plus
 
 
 import segmentation_models_pytorch as smp
