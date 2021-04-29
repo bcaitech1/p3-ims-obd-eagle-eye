@@ -18,7 +18,7 @@ from model import get_model
 from utils import seed_everything, label_accuracy_score, add_hist
 from evaluation import save_model
 
-WANDB = False
+WANDB = True
 
 def train(args,epoch,num_epochs, model, criterion, optimizer, dataloader,scheduler=None):
     model.train()
@@ -107,10 +107,10 @@ def main(args):
     seed_everything(21)
     if WANDB:
         wandb.init(project="stage-3", reinit=True)
-        # if args.MODEL is None:
-        wandb.run.name = args.MODEL +'_' +args.ENCODER
-        # else:
-        #     wandb.run.name = args.MODEL
+        if args.ENCODER:
+            wandb.run.name = args.MODEL +'_' +args.ENCODER
+        else:
+            wandb.run.name = args.MODEL
         wandb.config.update(args)
 
         args = wandb.config
