@@ -42,12 +42,12 @@ train.py
 ---
 모델을 학습시키고 검증하여 val loss를 기준으로 모델을 저장. 상단의 WANDB = True/False 로 wandb 적용가능.
 
-wandb를 처음 하신다면 
-터미널에서 pip install wandb 후
-wandb.ai 사이트에서 구글로 가입 후 로그인
-터미널에서 wandb login 입력 
-나타나는 url으로 ctrl + click
-key 입력
-상단의 WANDB = True
-끝.
+- wandb를 처음 하신다면 
+- 터미널에서 pip install wandb 후
+- wandb.ai 사이트에서 구글로 가입 후 로그인
+- 터미널에서 wandb login 입력 
+- 나타나는 url으로 ctrl + click
+- key 입력
+- 상단의 WANDB = True
+- 끝.
 
