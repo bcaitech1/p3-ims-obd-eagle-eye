@@ -3,6 +3,9 @@ get_tp_fp_fn, SoftDiceLoss, and DC_and_CE/TopK_loss are from https://github.com/
 """
 
 import torch
+import sys
+# insert at 1, 0 is the script path (or '' in REPL)
+sys.path.insert(1, '/opt/ml/p3-ims-obd-eagle-eye/code/SegLoss/losses_pytorch')
 from ND_Crossentropy import CrossentropyND, TopKLoss, WeightedCrossEntropyLoss
 from torch import nn
 from torch.autograd import Variable

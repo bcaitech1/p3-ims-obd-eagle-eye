@@ -39,7 +39,7 @@ def train(args,epoch,num_epochs, model, criterions, optimizer, dataloader,schedu
         if flag=='+':
             loss = criterions[1](outputs, masks)+ criterions[2](outputs, masks)
         elif flag=='-':
-            loss = criterions[1](outputs, masks)- criterions[2](outputs, masks)
+            loss = criterions[1](outputs, masks) - criterions[2](outputs, masks)
         else:
             loss = criterions[1](outputs, masks)
         # loss = criterion(outputs, masks)
@@ -47,7 +47,7 @@ def train(args,epoch,num_epochs, model, criterions, optimizer, dataloader,schedu
         loss.backward()
 
         optimizer.step()
-        if (step + 1) % 25 == 0:
+        if (step + 1) % 2 == 0:
             current_lr = get_lr(optimizer)
             print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f} lr: {}'.format(
                     epoch+1, num_epochs, step+1, len(dataloader), loss.item(),current_lr))
@@ -145,7 +145,7 @@ def main(args):
         criterion.append('+')
         criterion.append(create_criterion(args.LOSS.split('+')[0]))
         criterion.append(create_criterion(args.LOSS.split('+')[1]))        
-    elif args.LOSS in '-':
+    elif '-' in args.LOSS:
         criterion.append('-')
         criterion.append(create_criterion(args.LOSS.split('-')[0]))
         criterion.append(create_criterion(args.LOSS.split('-')[1]))   

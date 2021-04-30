@@ -134,7 +134,8 @@ _criterion_entrypoints = {
     "1":return_1,
     "CEWithL1":CrossEntropyWithL1,
     "l1":nn.L1Loss,
-    "dice" : dice.GDiceLoss,
+    # GDiceLoss를 사용하면 에러 발생
+    "dice" : dice.GDiceLossV2,
     # "iou" : IOU_loss,
 }
 
