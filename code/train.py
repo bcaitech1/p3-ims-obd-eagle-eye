@@ -1,6 +1,7 @@
 import os
 import random
 import time
+from dotenv import load_dotenv
 
 import wandb
 
@@ -17,6 +18,7 @@ from scheduler import create_scheduler
 from model import get_model
 from utils import seed_everything, label_accuracy_score, add_hist
 from evaluation import save_model
+
 
 WANDB = True
 
@@ -105,8 +107,9 @@ def run(args, model, criterion, optimizer, dataloader,scheduler=None):
 
 def main(args):
     seed_everything(21)
+    load_dotenv()
     if WANDB:
-        wandb.init(project="stage-3", reinit=True)
+        wandb.init(project=os.environ.get('WANDB_PROJECT_NAME'), reinit=True)
         if args.ENCODER:
             wandb.run.name = args.MODEL +'_' +args.ENCODER
         else:
