@@ -110,6 +110,10 @@ class FocalTverskyLoss(nn.Module):
         inputs = inputs.view(-1)
         targets = targets.view(-1)
         
+        p0_g0 = None
+        p0_g1 = None
+        p1_g0 = None
+
         #True Positives, False Positives & False Negatives
         TP = (inputs * targets).sum()    
         FP = ((1-targets) * inputs).sum()
