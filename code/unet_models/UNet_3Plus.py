@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import sys
 # insert at 1, 0 is the script path (or '' in REPL)
-sys.path.insert(1, '/opt/ml/code/models')
+sys.path.insert(1, '/opt/ml/p3-ims-obd-eagle-eye/code/unet_models')
 from layers import unetConv2
 from init_weights import init_weights
 '''
