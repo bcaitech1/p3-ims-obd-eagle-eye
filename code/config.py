@@ -7,8 +7,8 @@ import torch
 def get_args():
     parser = argparse.ArgumentParser(description="Semantic Segmentation!!!")
     parser.add_argument("--EPOCHS", default=20, type=int)
-    parser.add_argument("--BATCH_SIZE", default=20, type=int)
-    parser.add_argument("--LEARNING_RATE", default=0.001, type=float)
+    parser.add_argument("--BATCH_SIZE", default=16, type=int)
+    parser.add_argument("--LEARNING_RATE", default=0.0001, type=float)
     parser.add_argument("--LOSS", default="cross_entropy", type=str)
     parser.add_argument("--SCHEDULER", default=None, type=str)
     parser.add_argument("--OPTIMIZER", default="AdamP", type=str)

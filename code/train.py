@@ -22,7 +22,7 @@ from evaluation import save_model
 
 WANDB = True
 
-def train(args,epoch,num_epochs, model, criterion, optimizer, dataloader,scheduler=None):
+def train(args,epoch,num_epochs, model, criterions, optimizer, dataloader,scheduler=None):
     model.train()
     epoch_loss = 0
     # labels = torch.tensor([]).to(args.device)
@@ -37,12 +37,19 @@ def train(args,epoch,num_epochs, model, criterion, optimizer, dataloader,schedul
         images, masks = images.to(args.device), masks.to(args.device)
                 
         outputs = model(images)
-        loss = criterion(outputs, masks)
+        flag=criterions[0]
+        if flag=='+':
+            loss = criterions[1](outputs, masks)+ criterions[2](outputs, masks)
+        elif flag=='-':
+            loss = criterions[1](outputs, masks) - criterions[2](outputs, masks)
+        else:
+            loss = criterions[1](outputs, masks)
+        # loss = criterion(outputs, masks)
 
         loss.backward()
 
         optimizer.step()
-        if (step + 1) % 25 == 0:
+        if (step + 1) % 2 == 0:
             current_lr = get_lr(optimizer)
             print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f} lr: {}'.format(
                     epoch+1, num_epochs, step+1, len(dataloader), loss.item(),current_lr))
@@ -52,7 +59,7 @@ def train(args,epoch,num_epochs, model, criterion, optimizer, dataloader,schedul
     return (epoch_loss / len(dataloader))
 
 
-def evaluate(args, model, criterion, dataloader):
+def evaluate(args, model, criterions, dataloader):
     model.eval()
     epoch_loss = 0
     n_class = 12
@@ -67,7 +74,13 @@ def evaluate(args, model, criterion, dataloader):
             images, masks = images.to(args.device), masks.to(args.device)            
 
             outputs = model(images)
-            loss = criterion(outputs, masks)
+            flag=criterions[0]
+            if flag=='+':
+                loss = criterions[1](outputs, masks)+ criterions[2](outputs, masks)
+            elif flag=='-':
+                loss = criterions[1](outputs, masks)- criterions[2](outputs, masks)
+            else:
+                loss = criterions[1](outputs, masks)
             epoch_loss += loss
             
             outputs = torch.argmax(outputs.squeeze(), dim=1).detach().cpu().numpy()
@@ -89,7 +102,8 @@ def evaluate(args, model, criterion, dataloader):
 
 
 def run(args, model, criterion, optimizer, dataloader,scheduler=None):
-    best_valid_loss = float("inf")
+    best_mIoU_score = float("inf")
+    # best_valid_loss = float("inf")
 
     train_loader, val_loader = dataloader
 
@@ -108,10 +122,12 @@ def run(args, model, criterion, optimizer, dataloader,scheduler=None):
             
 
         print(f"epoch:{epoch+1}/{args.EPOCHS} train_loss: {train_loss:.4f} valid_loss: {valid_loss:.4f} mIoU: {mIoU_score:.4f}")
-        if valid_loss < best_valid_loss:
+        # if valid_loss < best_valid_loss:
+        if mIoU_score < best_mIoU_score:
                 print(f'Best performance at epoch: {epoch + 1}')
                 print('Save model in', args.MODEL_PATH)
-                best_valid_loss = valid_loss
+                # best_valid_loss = valid_loss
+                best_mIoU_score = mIoU_score
                 save_model(model, args.MODEL_PATH)
         
 
@@ -136,8 +152,19 @@ def main(args):
 
     if WANDB:
         wandb.watch(model)
-
-    criterion = create_criterion(args.LOSS)
+    
+    criterion=[]
+    if '+' in args.LOSS :
+        criterion.append('+')
+        criterion.append(create_criterion(args.LOSS.split('+')[0]))
+        criterion.append(create_criterion(args.LOSS.split('+')[1]))        
+    elif '-' in args.LOSS:
+        criterion.append('-')
+        criterion.append(create_criterion(args.LOSS.split('-')[0]))
+        criterion.append(create_criterion(args.LOSS.split('-')[1]))   
+    else:
+        criterion.append('0')
+        criterion.append(create_criterion(args.LOSS))
     optimizer = create_optimizer(args.OPTIMIZER,model,args.LEARNING_RATE)
     if args.SCHEDULER:
         scheduler = create_scheduler(args.SCHEDULER,optimizer)
