@@ -53,3 +53,19 @@ def add_hist(hist, label_trues, label_preds, n_class):
         hist += _fast_hist(lt.flatten(), lp.flatten(), n_class)
 
     return hist
+
+
+def get_miou(label_trues, label_preds, n_class):
+    """
+        이미지별 miou를 갖는 list를 리턴
+    """
+    miou_list = []
+    for lt, lp in zip(label_trues, label_preds):
+        hist = _fast_hist(lt.flatten(), lp.flatten(), n_class)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            iu = np.diag(hist) / (
+                hist.sum(axis=1) + hist.sum(axis=0) - np.diag(hist)
+            )
+        miou_list.append(np.nanmean(iu))
+        
+    return miou_list

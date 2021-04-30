@@ -15,7 +15,7 @@ from loss import create_criterion
 from optimizer import create_optimizer
 from scheduler import create_scheduler
 from model import get_model
-from utils import seed_everything, label_accuracy_score, add_hist
+from utils import seed_everything, label_accuracy_score, add_hist, get_miou
 from evaluation import save_model
 
 WANDB = True
@@ -56,6 +56,7 @@ def evaluate(args, model, criterion, dataloader):
     n_class = 12
     with torch.no_grad():
         hist = np.zeros((n_class, n_class))
+        miou_all = []
         for images, masks, _ in dataloader:
             
             images = torch.stack(images)       # (batch, channel, height, width)
@@ -71,7 +72,16 @@ def evaluate(args, model, criterion, dataloader):
 
             hist = add_hist(hist, masks.detach().cpu().numpy(), outputs, n_class=n_class)
 
+            # miou 저장
+            miou_list = get_miou(masks.detach().cpu().numpy(), outputs, n_class=n_class)
+            miou_all.extend(miou_list)
+
         acc, acc_cls, mIoU, fwavacc = label_accuracy_score(hist)
+
+        # TODO 아래 miou 사용 확정시 label_accuracy_score 수정 필요
+        # 새로운 miou 사용
+        mIou = np.nanmean(miou_all)
+
         print(f'acc:{acc:.4f}, acc_cls:{acc_cls:.4f}, fwavacc:{fwavacc:.4f}')
     return (epoch_loss / len(dataloader)), mIoU
 
