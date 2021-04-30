@@ -1,122 +1,142 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+from SegLoss.losses_pytorch import ND_Crossentropy as NDCE
+from SegLoss.losses_pytorch import dice_loss as dice
+from SegLoss.losses_pytorch import focal_loss as focal
+from typing import Optional
+EPS = 1e-10
 # 제공받은 코드
-# https://discuss.pytorch.org/t/is-this-a-correct-implementation-for-focal-loss-in-pytorch/43327/8
-class FocalLoss(nn.Module):
-    def __init__(self, weight=None, gamma=2.0, reduction="mean"):
-        nn.Module.__init__(self)
-        self.weight = weight
-        self.gamma = gamma
-        self.reduction = reduction
 
-    def forward(self, input_tensor, target_tensor):
-        log_prob = F.log_softmax(input_tensor, dim=-1)
-        prob = torch.exp(log_prob)
-        return F.nll_loss(
-            ((1 - prob) ** self.gamma) * log_prob,
-            target_tensor,
-            weight=self.weight,
-            reduction=self.reduction,
-        )
-
-
-class LabelSmoothingLoss(nn.Module):
-    def __init__(self, classes=3, smoothing=0.0, dim=-1):
-        super(LabelSmoothingLoss, self).__init__()
-        self.confidence = 1.0 - smoothing
-        self.smoothing = smoothing
-        self.cls = classes
-        self.dim = dim
-
-    def forward(self, pred, target):
-        pred = pred.log_softmax(dim=self.dim)
-        with torch.no_grad():
-            true_dist = torch.zeros_like(pred)
-            true_dist.fill_(self.smoothing / (self.cls - 1))
-            true_dist.scatter_(1, target.data.unsqueeze(1), self.confidence)
-        return torch.mean(torch.sum(-true_dist * pred, dim=self.dim))
-
-
-# https://gist.github.com/SuperShinyEyes/dcc68a08ff8b615442e3bc6a9b55a354
-class F1Loss(nn.Module):
-    def __init__(self, classes=3, epsilon=1e-7):
-        super().__init__()
-        self.classes = classes
-        self.epsilon = epsilon
-
-    def forward(self, y_pred, y_true):
-        assert y_pred.ndim == 2
-        assert y_true.ndim == 1
-        y_true = F.one_hot(y_true, self.classes).to(torch.float32)
-        y_pred = F.softmax(y_pred, dim=1)
-
-        tp = (y_true * y_pred).sum(dim=0).to(torch.float32)
-        tn = ((1 - y_true) * (1 - y_pred)).sum(dim=0).to(torch.float32)
-        fp = ((1 - y_true) * y_pred).sum(dim=0).to(torch.float32)
-        fn = (y_true * (1 - y_pred)).sum(dim=0).to(torch.float32)
-
-        precision = tp / (tp + fp + self.epsilon)
-        recall = tp / (tp + fn + self.epsilon)
-
-        f1 = 2 * (precision * recall) / (precision + recall + self.epsilon)
-        f1 = f1.clamp(min=self.epsilon, max=1 - self.epsilon)
-        return 1 - f1.mean()
-
-class dice(nn.Module):
+class return_1(nn.Module):
+    """return 1
+    """
     def __init__(self):
         nn.Module.__init__(self)
-        self.smooth = 1.
+
     def forward(self, input_tensor, target_tensor):
-        iflat = input_tensor.contiguous().view(-1)
-        tflat = target_tensor.contiguous().view(-1)
-        intersection = (iflat * tflat).sum()
+        return 1
 
-        A_sum = torch.sum(iflat)
-        B_sum = torch.sum(tflat)
+# https://arxiv.org/pdf/2104.08717.pdf
+class CompoundLoss(nn.Module):
+    """
+    The base class for implementing a compound loss:
+        l = l_1 + alpha * l_2
+    """
+    def __init__(self, 
+                 alpha: float = 1.,
+                 factor: float = 1.,
+                 step_size: int = 0,
+                 max_alpha: float = 100.,
+                 temp: float = 1.,
+                 ignore_index: int = 255,
+                 background_index: int = 0,
+                 weight: Optional[torch.Tensor] = None) -> None:
         
-        return 1 - ((2. * intersection + self.smooth) / (A_sum + B_sum + self.smooth) )
-def _iou(pred, target, size_average = True):
+        super().__init__()
+        self.alpha = alpha
+        self.max_alpha = max_alpha
+        self.factor = factor
+        self.step_size = step_size
+        self.temp = temp
+        self.ignore_index = ignore_index
+        self.background_index = background_index
+        self.weight = weight
 
-    b = pred.shape[0]
-    IoU = 0.0
-    for i in range(0,b):
-        #compute the IoU of the foreground
-        Iand1 = torch.sum(target[i,:,:,:]*pred[i,:,:,:])
-        Ior1 = torch.sum(target[i,:,:,:]) + torch.sum(pred[i,:,:,:])-Iand1
-        IoU1 = Iand1/Ior1
+    def cross_entropy(self, inputs: torch.Tensor, labels: torch.Tensor):
+        
+        loss = F.cross_entropy(
+                inputs, labels, weight=self.weight, ignore_index=self.ignore_index)
+        return loss
 
-        #IoU loss is (1-IoU1)
-        IoU = IoU + (1-IoU1)
+    def adjust_alpha(self, epoch: int) -> None:
+        if self.step_size == 0:
+            return
+        if (epoch + 1) % self.step_size == 0:
+            curr_alpha = self.alpha
+            self.alpha = min(self.alpha * self.factor, self.max_alpha)
 
-    return IoU/b
+    def get_gt_proportion(self,
+                          labels: torch.Tensor,
+                          target_shape,
+                          ignore_index: int = 255):
+        
+        bin_labels, valid_mask = expand_onehot_labels(labels, target_shape, ignore_index)
+        
+        gt_proportion = get_region_proportion(bin_labels, valid_mask)
+        return gt_proportion, valid_mask
 
+    def get_pred_proportion(self, 
+                            logits: torch.Tensor,
+                            temp: float = 1.0,
+                            valid_mask=None):
+        
+        preds = F.log_softmax(temp * logits, dim=1).exp()
+        pred_proportion = get_region_proportion(preds, valid_mask)
+        return pred_proportion
+def expand_onehot_labels(labels, target_shape, ignore_index):
+    """Expand onehot labels to match the size of prediction."""
+    bin_labels = labels.new_zeros(target_shape)
+    valid_mask = (labels >= 0) & (labels != ignore_index)
+    inds = torch.nonzero(valid_mask, as_tuple=True)
 
-class IOU(torch.nn.Module):
-    def __init__(self, size_average = True):
-        super(IOU, self).__init__()
-        self.size_average = size_average
+    if inds[0].numel() > 0:
+        if labels.dim() == 3:
+            bin_labels[inds[0], labels[valid_mask], inds[1], inds[2]] = 1
+        else:
+            bin_labels[inds[0], labels[valid_mask]] = 1
 
-    def forward(self, pred, target):
+    return bin_labels, valid_mask
+def get_region_proportion(x: torch.Tensor, valid_mask: torch.Tensor = None) -> torch.Tensor:
+    """Get region proportion
+    Args:
+        x : one-hot label map/mask
+        valid_mask : indicate the considered elements
+    """
+    if valid_mask is not None:
+        if valid_mask.dim() == 4:
+            x = torch.einsum("bcwh, bcwh->bcwh", x, valid_mask)
+            cardinality = torch.einsum("bcwh->bc", valid_mask)
+        else:
+            x = torch.einsum("bcwh,bwh->bcwh", x, valid_mask)
+            cardinality = torch.einsum("bwh->b", valid_mask).unsqueeze(dim=1).repeat(1, x.shape[1])
+    else:
+        cardinality = x.shape[2] * x.shape[3]
 
-        return _iou(pred, target, self.size_average)
+    region_proportion = (torch.einsum("bcwh->bc", x) + EPS) / (cardinality + EPS)
 
-def IOU_loss(pred,label):
-    iou_loss = IOU(size_average=True)
-    iou_out = iou_loss(pred, label)
-    print("iou_loss:", iou_out.data.cpu().numpy())
-    return iou_out
+    return region_proportion
+class CrossEntropyWithL1(CompoundLoss):
+    """
+    Cross entropy loss with region size priors measured by l1.
+    The loss can be described as:
+        l = CE(X, Y) + alpha * |gt_region - prob_region|
+    """
+    def forward(self, inputs: torch.Tensor, labels: torch.Tensor):
+        # ce term
+        loss_ce = self.cross_entropy(inputs, labels)
+        # regularization
+        gt_proportion, valid_mask = self.get_gt_proportion(labels, inputs.shape)
+        pred_proportion = self.get_pred_proportion(inputs, temp=self.temp, valid_mask=valid_mask)
+        loss_reg = (pred_proportion - gt_proportion).abs().mean()
 
+        loss = loss_ce + self.alpha * loss_reg
+
+        # return loss, loss_ce, loss_reg
+        return loss
+
+# 더 많은 loss를 사용하려면 아래 git hub or SegLoss/losses_pyorch에 들어가시면 됩니다.
+# https://github.com/JunMa11/SegLoss
 _criterion_entrypoints = {
     "cross_entropy": nn.CrossEntropyLoss,
-    "focal": FocalLoss,
-    "label_smoothing": LabelSmoothingLoss,
-    "f1": F1Loss,
-    "dice" : dice,
-    "iou" : IOU_loss,
+    "cross_entropy_ND":NDCE.CrossentropyND,
+    "focal": focal.FocalLoss,
+    "1":return_1,
+    "CEWithL1":CrossEntropyWithL1,
+    "l1":nn.L1Loss,
+    "dice" : dice.GDiceLoss,
+    # "iou" : IOU_loss,
 }
-
 
 def criterion_entrypoint(criterion_name):
     return _criterion_entrypoints[criterion_name]

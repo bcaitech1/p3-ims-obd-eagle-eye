@@ -145,3 +145,8 @@ output/
 
 # wandb
 wandb/
+
+# pretrain
+pretrained/
+# notepad
+notepad.py
