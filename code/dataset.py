@@ -8,7 +8,7 @@ warnings.filterwarnings("ignore")
 
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, SubsetRandomSampler
 from utils import label_accuracy_score
 import cv2
 
@@ -38,6 +38,7 @@ seed_everything(21)
 dataset_path = "/opt/ml/input/data"
 train_path = dataset_path + "/train.json"
 val_path = dataset_path + "/val.json"
+all_path = dataset_path + "/train_all.json"
 test_path = dataset_path + "/test.json"
 
 
@@ -127,46 +128,66 @@ def collate_fn(batch):
     return tuple(zip(*batch))
 
 
-def get_dataloader(batch_size = 20):
-    train_transform = A.Compose([ToTensorV2()])
+def get_dataloader(batch_size=20, fold_index=None):
+    """dataloader를 반환합니다
 
-    val_transform = A.Compose([ToTensorV2()])
+    Args:
+        batch_size (int) : Defaults to 20.
+        fold_index (tuple): train_index와 val_index
 
-    # create own Dataset 1 (skip)
-    # validation set을 직접 나누고 싶은 경우
-    # random_split 사용하여 data set을 8:2 로 분할
-    # train_size = int(0.8*len(dataset))
-    # val_size = int(len(dataset)-train_size)
-    # dataset = CustomDataLoader(data_dir=train_path, mode='train', transform=transform)
-    # train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+    Returns:
+        (train_loader, val_loader)
+    """
+    train_transform = A.Compose([
+        A.Resize(256,256),
+        ToTensorV2()])
 
-    # create own Dataset 2
-    # train dataset
-    train_dataset = CustomDataLoader(
-        data_dir=train_path, mode="train", transform=train_transform
-    )
+    val_transform = A.Compose([
+        A.Resize(256,256),
+        ToTensorV2()])
 
-    # validation dataset
-    val_dataset = CustomDataLoader(
-        data_dir=val_path, mode="val", transform=val_transform
-    )
+    if fold_index:
+        # Kfold
+        dataset = CustomDataLoader(data_dir=all_path, mode='train', transform=train_transform)
 
-    # DataLoader
-    train_loader = torch.utils.data.DataLoader(
-        dataset=train_dataset,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=4,
-        collate_fn=collate_fn,
-    )
+        train_subsampler = SubsetRandomSampler(fold_index[0]) # train_index sampler
+        val_subsampler = SubsetRandomSampler(fold_index[1]) # val_index sampler
 
-    val_loader = torch.utils.data.DataLoader(
-        dataset=val_dataset,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=4,
-        collate_fn=collate_fn,
-    )
+        train_loader = DataLoader(
+            dataset, batch_size=batch_size, sampler=train_subsampler,
+            num_workers=4, collate_fn=collate_fn, drop_last=True)
+        val_loader = DataLoader(
+            dataset, batch_size=batch_size, sampler=val_subsampler, 
+            num_workers=4, collate_fn=collate_fn, drop_last=True)
+
+    else:
+        # Hold Out
+        # train dataset
+        train_dataset = CustomDataLoader(
+            data_dir=train_path, mode="train", transform=train_transform
+        )
+
+        # validation dataset
+        val_dataset = CustomDataLoader(
+            data_dir=val_path, mode="val", transform=val_transform
+        )
+
+        # DataLoader
+        train_loader = torch.utils.data.DataLoader(
+            dataset=train_dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=4,
+            collate_fn=collate_fn,
+        )
+
+        val_loader = torch.utils.data.DataLoader(
+            dataset=val_dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=4,
+            collate_fn=collate_fn,
+        )
 
     return train_loader, val_loader
 
