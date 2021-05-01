@@ -99,8 +99,7 @@ def evaluate(args, model, criterions, dataloader):
 
 
 def run(args, model, criterion, optimizer, dataloader,scheduler=None):
-    best_mIoU_score = float("inf")
-    # best_valid_loss = float("inf")
+    best_mIoU_score = 0.0
 
     train_loader, val_loader = dataloader
 
@@ -119,11 +118,10 @@ def run(args, model, criterion, optimizer, dataloader,scheduler=None):
             
 
         print(f"epoch:{epoch+1}/{args.EPOCHS} train_loss: {train_loss:.4f} valid_loss: {valid_loss:.4f} mIoU: {mIoU_score:.4f}")
-        # if valid_loss < best_valid_loss:
-        if mIoU_score < best_mIoU_score:
+
+        if mIoU_score > best_mIoU_score:
             print(f'Best performance at epoch: {epoch + 1}')
             print('Save model in', args.MODEL_PATH)
-            # best_valid_loss = valid_loss
             best_mIoU_score = mIoU_score
             save_model(model, args.MODEL_PATH)
         
