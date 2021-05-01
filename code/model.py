@@ -1,25 +1,39 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-
 from torchvision import models
 from torchvision.models import vgg16
 from unet_models import UNet_3Plus
-
-
+# from hrnet.lib.models import seg_hrnet_ocr
+from seg_hrnet import get_seg_model
 import segmentation_models_pytorch as smp
+from deeplab_modeling.deeplab import DeepLab
+import os
+except_list=['resnet','xception']
+pretrained_dir='../pretrained'
 def get_model(model,encoder=None):
     if encoder:
-        decoder_model=getattr(smp,model)
-        model=decoder_model(
-            encoder_name=encoder,
-            encoder_weights="imagenet",
-            in_channels=3, 
-            classes=12,
-        )
+        if model=='DeepLabV3Plus' and encoder in except_list:
+            model=DeepLab(
+                num_classes=12,
+                backbone=encoder
+            )
+            # checkpoint = torch.load(os.path.join(pretrained_dir,'DeepLabV3Plus_xception_pretrained.pt'))
+            # model.load_state_dict(checkpoint)
+            # model=checkpoint
+        else:
+            decoder_model=getattr(smp,model)
+            model=decoder_model(
+                encoder_name=encoder,
+                encoder_weights="imagenet",
+                in_channels=3, 
+                classes=12,
+            )
     else:
         if model == 'unet3p':
             model=UNet_3Plus.UNet_3Plus(n_classes=12)
+        elif model=='hrnet':
+            model=get_seg_model(config)
     return model
 
 
@@ -240,7 +254,45 @@ class SegNet(nn.Module):
         return out
 
 
+pretrained_dir='../pretrained'
+# dict for model configuration
+config = {}
 
+config['NUM_CLASSES'] = 12
+# https://github.com/HRNet/HRNet-Semantic-Segmentation 여기 나와잇는 여러 dataset 중에 하나 선택(hrnetv2 -w48)
+# pretrain_cityspace : https://github.com/hsfzxjy/models.storage/releases/download/HRNet-OCR/hrnet_cs_8090_torch11.pth
+# pretrain_pascal VOC :https://github.com/hsfzxjy/models.storage/releases/download/HRNet-OCR/hrnet_pascal_ctx_5410_torch11.pth
+config['PRETRAINED'] = os.path.join(pretrained_dir,'hrnet_cs_8090_torch11.pth')
+
+config['MODEL'] = {'EXTRA': {'FINAL_CONV_KERNEL': 1,
+      'STAGE1': {'BLOCK': 'BOTTLENECK', 
+                 'FUSE_METHOD': 'SUM',
+                 'NUM_BLOCKS': [1],
+                 'NUM_CHANNELS': [64],
+                 'NUM_MODULES': 1,
+                 'NUM_RANCHES': 1
+                },
+      'STAGE2': {'BLOCK': 'BASIC',
+                 'FUSE_METHOD': 'SUM',
+                 'NUM_BLOCKS': [4, 4],
+                 'NUM_BRANCHES': 2,
+                 'NUM_CHANNELS': [48, 96],
+                 'NUM_MODULES': 1
+                },
+      'STAGE3':{'BLOCK': 'BASIC',
+                'FUSE_METHOD': 'SUM',
+                'NUM_BLOCKS': [4, 4, 4],
+                'NUM_BRANCHES': 3,
+                'NUM_CHANNELS': [48, 96, 192],
+                'NUM_MODULES': 1
+               },
+       'STAGE4': {'BLOCK': 'BASIC',
+                 'FUSE_METHOD': 'SUM',
+                 'NUM_BLOCKS': [2, 2, 2, 2],
+                 'NUM_BRANCHES': 4,
+                 'NUM_CHANNELS': [48, 96, 192, 384],
+                 'NUM_MODULES': 1
+                 }}}
 
 if __name__ == "__main__":
     # 구현된 model에 임의의 input을 넣어 output이 잘 나오는지 test
@@ -249,6 +301,7 @@ if __name__ == "__main__":
     model = SegNet()
     x = torch.randn([1, 3, 512, 512])
     print("input shape : ", x.shape)
+    
     out = model(x).to(device)
     print("output shape : ", out.size())
 

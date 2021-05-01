@@ -65,7 +65,7 @@ if __name__ == "__main__":
     # parser.add_argument('--augmentation', type=str, default=None, help='augmentation')
     parser.add_argument('--model', type=str, default='DeepLabV3Plus', help='model type (default: BaseModel)')
     parser.add_argument('--encoder', type=str, default=None, help='model type (default: BaseModel)')
-    parser.add_argument('--model_dir', type=str, default= './saved/efficientnet-b4DeepLabV3Plus_efficientnet-b4_DeepLabV3Plus.pt')
+    parser.add_argument('--model_dir', type=str, default= '/opt/ml/code/saved/DeepLabV3Plus_resnet_res_reduce_resize.pt')
     parser.add_argument('--output_dir', type=str, default='./output')
     args = parser.parse_args()
 

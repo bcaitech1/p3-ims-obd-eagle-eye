@@ -19,6 +19,7 @@ from utils import seed_everything, label_accuracy_score, add_hist
 from evaluation import save_model
 
 WANDB = True
+WANDB = False
 
 def train(args,epoch,num_epochs, model, criterions, optimizer, dataloader,scheduler=None):
     model.train()
@@ -47,13 +48,13 @@ def train(args,epoch,num_epochs, model, criterions, optimizer, dataloader,schedu
         loss.backward()
 
         optimizer.step()
-        if (step + 1) % 2 == 0:
+        if (step + 1) % 25 == 0:
             current_lr = get_lr(optimizer)
             print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f} lr: {}'.format(
                     epoch+1, num_epochs, step+1, len(dataloader), loss.item(),current_lr))
         epoch_loss += loss
     if scheduler:
-        scheduler.step()
+        scheduler.step(epoch_loss)
     return (epoch_loss / len(dataloader))
 
 
@@ -90,7 +91,7 @@ def evaluate(args, model, criterions, dataloader):
 
 
 def run(args, model, criterion, optimizer, dataloader,scheduler=None):
-    best_mIoU_score = float("inf")
+    best_mIoU_score = 0.0
     # best_valid_loss = float("inf")
 
     train_loader, val_loader = dataloader
@@ -111,7 +112,7 @@ def run(args, model, criterion, optimizer, dataloader,scheduler=None):
 
         print(f"epoch:{epoch+1}/{args.EPOCHS} train_loss: {train_loss:.4f} valid_loss: {valid_loss:.4f} mIoU: {mIoU_score:.4f}")
         # if valid_loss < best_valid_loss:
-        if mIoU_score < best_mIoU_score:
+        if mIoU_score > best_mIoU_score:
                 print(f'Best performance at epoch: {epoch + 1}')
                 print('Save model in', args.MODEL_PATH)
                 # best_valid_loss = valid_loss
@@ -124,9 +125,9 @@ def main(args):
     if WANDB:
         wandb.init(project="stage-3", reinit=True)
         if args.ENCODER:
-            wandb.run.name = args.MODEL +'_' +args.ENCODER
+            wandb.run.name = args.MODEL +'_' +args.ENCODER +'_' +args.FILE_NAME
         else:
-            wandb.run.name = args.MODEL
+            wandb.run.name = args.MODEL +'_' +args.FILE_NAME
         wandb.config.update(args)
 
         args = wandb.config

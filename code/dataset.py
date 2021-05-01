@@ -128,9 +128,13 @@ def collate_fn(batch):
 
 
 def get_dataloader(batch_size = 20):
-    train_transform = A.Compose([ToTensorV2()])
+    train_transform = A.Compose([
+        A.Resize(256,256),
+        ToTensorV2()])
 
-    val_transform = A.Compose([ToTensorV2()])
+    val_transform = A.Compose([
+        A.Resize(256,256),
+        ToTensorV2()])
 
     # create own Dataset 1 (skip)
     # validation set을 직접 나누고 싶은 경우
@@ -172,7 +176,7 @@ def get_dataloader(batch_size = 20):
 
 
 def get_testloader(batch_size = 20):
-    test_transform = A.Compose([ToTensorV2()])
+    test_transform = A.Compose([A.Resize(256,256),ToTensorV2()])
 
     # test dataset
     test_dataset = CustomDataLoader(
