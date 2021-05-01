@@ -19,7 +19,7 @@ import copy
 
 WANDB = True
 
-def train(args, epoch, num_epochs, model, criterion, optimizer, dataloader, scheduler=None):
+def train(args, epoch, num_epochs, model, criterions, optimizer, dataloader, scheduler=None):
     model.train()
     epoch_loss = 0
     # labels = torch.tensor([]).to(args.device)
@@ -34,7 +34,7 @@ def train(args, epoch, num_epochs, model, criterion, optimizer, dataloader, sche
         images, masks = images.to(args.device), masks.to(args.device)
                 
         outputs = model(images)
-        flag=criterions[0]
+        flag = criterions[0]
         if flag=='+':
             loss = criterions[1](outputs, masks)+ criterions[2](outputs, masks)
         elif flag=='-':
