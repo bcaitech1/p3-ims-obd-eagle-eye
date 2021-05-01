@@ -139,11 +139,11 @@ def get_dataloader(batch_size=20, fold_index=None):
         (train_loader, val_loader)
     """
     train_transform = A.Compose([
-        A.Resize(256,256),
+        # A.Resize(256,256),
         ToTensorV2()])
 
     val_transform = A.Compose([
-        A.Resize(256,256),
+        # A.Resize(256,256),
         ToTensorV2()])
 
     if fold_index:

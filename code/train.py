@@ -138,21 +138,25 @@ def main(args):
         else:
             run_name = args.MODEL
             
-    # kfold index 생성
+    
     if args.KFOLD > 1:
+        # kfold index 생성
         fold_split = KFold(args.KFOLD, shuffle=True, random_state=21)
-        index_gen = iter(fold_split.split(range(10))) # 전체 이미지수 3272
-        args_origin = copy.deepcopy(args)
-        
+        index_gen = iter(fold_split.split(range(3272))) # 전체 이미지수 3272개
+        # pt 저장 폴더 생성
+        path_pair = args.MODEL_PATH.split('.')
+        os.makedirs(path_pair[0], exist_ok=True) 
+        # 재사용위해 args 복사
+        args_origin = copy.deepcopy(args) 
         
     for i in range(args.KFOLD):
-        # hold-out, kfold dataloader에 따라서 다르게 설정
+        # hold-out, kfold에 따라서 dataloader 다르게 설정
         if args.KFOLD > 1:
             # wandb
             if WANDB:
                 args = copy.deepcopy(args_origin)
-                pair = args_origin.MODEL_PATH.split('.')
-                args.MODEL_PATH = pair[0] + f'_k{i+1}.' + pair[1]
+                path_pair = args_origin.MODEL_PATH.split('.')
+                args.MODEL_PATH = path_pair[0] + f'/kfold_{i+1}.' + path_pair[1] # MODEL_PATH 변경
                 wandb.init(project=os.environ.get('WANDB_PROJECT_NAME'), name=run_name+f'_k{i+1}', config=args, reinit=True)
                 args = wandb.config
             # dataloader
