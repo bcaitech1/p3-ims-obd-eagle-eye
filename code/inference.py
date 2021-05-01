@@ -23,7 +23,7 @@ def load_model(args, device):
 
 def test(model, test_loader, device):
     size = 256
-    transform = A.Compose([A.Resize(256, 256)])
+    transform = A.Compose([A.Resize(256, 256, interpolation=0)]) # maks용 interpolation 설정
     print('Start prediction.')
     model.eval()
     
@@ -39,9 +39,9 @@ def test(model, test_loader, device):
             
             # resize (256 x 256)
             temp_mask = []
-            for img, mask in zip(np.stack(imgs), oms):
-                transformed = transform(image=img, mask=mask)
-                mask = transformed['mask']
+            for mask in oms:
+                transformed = transform(image=mask)
+                mask = transformed['image']
                 temp_mask.append(mask)
 
             oms = np.array(temp_mask)
