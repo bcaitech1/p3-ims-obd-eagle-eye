@@ -52,7 +52,7 @@ class SoftDiceLoss(nn.Module):
 
         dc = dc.mean()
 
-        return -dc, sum_cls
+        return 1-dc, sum_cls
 
 def softmax_helper(x):
     # copy from: https://github.com/MIC-DKFZ/nnUNet/blob/master/nnunet/utilities/nd_softmax.py

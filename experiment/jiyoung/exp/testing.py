@@ -166,7 +166,7 @@ class CustomDataLoader(Dataset):
             # Unknown = 1, General trash = 2, ... , Cigarette = 11
             for i in range(len(anns)):
                 className = get_classname(anns[i]["category_id"], cats)
-                pixel_value = self.category_names.index(className)
+                pixel_value = category_names.index(className)
                 masks = np.maximum(self.coco.annToMask(anns[i]) * pixel_value, masks)
             masks = masks.astype(np.float32)
 
@@ -196,7 +196,8 @@ class CustomDataLoader(Dataset):
 exp_title = "TESTING"  # 실험 이름
 batch_size = 10  # Mini-batch size
 num_epochs = 10
-learning_rate = 0.0001
+learning_rate = 0.001
+num_workers = 0
 
 # train.json / validation.json / test.json 디렉토리 설정
 train_path = dataset_path + "/train.json"
@@ -217,7 +218,7 @@ train_loader = torch.utils.data.DataLoader(
     dataset=train_dataset,
     batch_size=batch_size,
     shuffle=True,
-    num_workers=0,
+    num_workers=num_workers,
     collate_fn=collate_fn,
 )
 
@@ -227,7 +228,7 @@ val_loader = torch.utils.data.DataLoader(
     dataset=val_dataset,
     batch_size=batch_size,
     shuffle=False,
-    num_workers=0,
+    num_workers=num_workers,
     collate_fn=collate_fn,
 )
 
@@ -241,17 +242,17 @@ model = smp.DeepLabV3Plus(
 # model = FCN8s(num_classes=12)
 model = model.to(device)
 
-x = torch.randn([2, 3, 512, 512]).to(device)
-print("input shape : ", x.shape)
-out = model(x).to(device)
-print("output shape : ", out.size())
+# x = torch.randn([2, 3, 512, 512]).to(device)
+# print("input shape : ", x.shape)
+# out = model(x).to(device)
+# print("output shape : ", out.size())
 
 criterion = SoftDiceLoss(apply_nonlin=nn.Softmax(dim=1))
 optim = adamp.AdamP(
     model.parameters(), lr=learning_rate, betas=(0.9, 0.999), weight_decay=1e-2
 )
 
-run = wandb.init(project="important", name="softdiceloss")
+run = wandb.init(project="important", name="PC")
 
 for epoch in range(num_epochs):
     for step, (images, masks, _) in enumerate(train_loader):
@@ -267,9 +268,37 @@ for epoch in range(num_epochs):
         optim.step()
 
         # wandb
-        one = sum_cls[0]
-        remain = sum_cls[1:].mean()
-        wandb.log({"loss": loss.item(), "BACK": one.item(), "FORE": remain.item()})
+        c0 = sum_cls[0]
+        c1 = sum_cls[1]
+        c2 = sum_cls[2]
+        c3 = sum_cls[3]
+        c4 = sum_cls[4]
+        c5 = sum_cls[5]
+        c6 = sum_cls[6]
+        c7 = sum_cls[7]
+        c8 = sum_cls[8]
+        c9 = sum_cls[9]
+        c10 = sum_cls[10]
+        c11 = sum_cls[11]
+
+        wandb.log(
+            {
+                "loss": loss.item(),
+                "c0": c0,
+                "c1": c1,
+                "c2": c2,
+                "c3": c3,
+                "c4": c4,
+                "c5": c5,
+                "c6": c6,
+                "c7": c7,
+                "c8": c8,
+                "c9": c9,
+                "c10": c10,
+                "c11": c11,
+                "epoch": epoch,
+            }
+        )
 
     print(f"end train_epoch {epoch}")
 
@@ -277,6 +306,7 @@ for epoch in range(num_epochs):
     for step, (images, masks, _) in enumerate(val_loader):
 
         with torch.no_grad():
+            # hist = np.zeros((12, 12))
 
             images = torch.stack(images).to(device)  # (batch, channel, height, width)
             masks = (
@@ -288,13 +318,11 @@ for epoch in range(num_epochs):
 
             outputs = torch.argmax(outputs.squeeze(), dim=1).detach().cpu().numpy()
 
-            hist = add_hist(
-                hist, masks.detach().cpu().numpy(), outputs, n_class=n_class
-            )
+            # hist = add_hist(hist, masks.detach().cpu().numpy(), outputs, n_class=12)
 
             # miou 저장
-            miou_list = get_miou(masks.detach().cpu().numpy(), outputs, n_class=n_class)
+            miou_list = get_miou(masks.detach().cpu().numpy(), outputs, n_class=12)
             miou_all.extend(miou_list)
 
     mIou = np.nanmean(miou_all)
-    wandb.log({"VAL_MIOU": mIou})
+    wandb.log({"VAL_MIOU": mIou, "epoch": epoch})
