@@ -340,6 +340,6 @@ for epoch in range(num_epochs):
 
     scheduler.step()
 
-    wandb.log({"VAL_MIOU": miou, "lr": optimizer.get_lr(), "epoch": epoch})
+    wandb.log({"VAL_MIOU": miou, "lr": get_lr(optimizer), "epoch": epoch})
 
     torch.save(model.state_dict(), f"/opt/ml/p3-ims-obd-eagle-eye/experiment/jiyoung/exp/checkp_{epoch}")
