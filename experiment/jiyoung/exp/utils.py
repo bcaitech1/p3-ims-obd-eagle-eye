@@ -5,6 +5,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+def get_lr(optimizer):
+    """
+    현재 learning rate 리턴
+    """
+    for param_group in optimizer.param_groups:
+        return param_group["lr"]
+
+
 def add_hist(hist, label_trues, label_preds, n_class):
     """
     stack hist(confusion matrix)
@@ -137,3 +145,26 @@ class FocalTverskyLoss(nn.Module):
         info_list = np.array([TP, FP, FN, Tversky], dtype=np.float)
 
         return FocalTversky, info_list
+
+
+def label_accuracy_score(hist):
+    """
+    Returns accuracy score evaluation result.
+      - [acc]: overall accuracy
+      - [acc_cls]: mean accuracy
+      - [mean_iu]: mean IU
+      - [fwavacc]: fwavacc
+    """
+    acc = np.diag(hist).sum() / hist.sum()
+    with np.errstate(divide="ignore", invalid="ignore"):
+        acc_cls = np.diag(hist) / hist.sum(axis=1)
+    acc_cls = np.nanmean(acc_cls)
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        iu = np.diag(hist) / (hist.sum(axis=1) + hist.sum(axis=0) - np.diag(hist))
+    mean_iu = np.nanmean(iu)
+
+    freq = hist.sum(axis=1) / hist.sum()
+    fwavacc = (freq[freq > 0] * iu[freq > 0]).sum()
+
+    return acc, acc_cls, mean_iu, fwavacc

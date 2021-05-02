@@ -121,7 +121,7 @@ class CustomDataLoader(Dataset):
         # cv2 를 활용하여 image 불러오기
         images = cv2.imread(os.path.join(dataset_path, image_infos["file_name"]))
         images = cv2.cvtColor(images, cv2.COLOR_BGR2RGB).astype(np.float32)
-        #         images /= 255.0
+        images /= 255.0
 
         if self.mode in ("train"):
             ann_ids = self.coco.getAnnIds(imgIds=image_infos["id"])
@@ -134,12 +134,16 @@ class CustomDataLoader(Dataset):
             # masks : size가 (height x width)인 2D
             # 각각의 pixel 값에는 "category id + 1" 할당
             # Background = 0
-            masks = np.zeros((12, image_infos["height"], image_infos["width"]))
+            masks = np.zeros(
+                (12, image_infos["height"], image_infos["width"]), dtype=np.ubyte
+            )
+            masks[0] = 1
             # Unknown = 1, General trash = 2, ... , Cigarette = 11
             for i in range(len(anns)):
                 className = get_classname(anns[i]["category_id"], cats)
-                pixel_value = category_names.index(className)
-                masks[pixel_value] = self.coco.annToMask(anns[i])
+                class_index = category_names.index(className)
+                masks[class_index] = self.coco.annToMask(anns[i])
+                masks[0] = (masks[0] == 1) | (masks[class_index] == 1)
 
             masks = masks.astype(np.float32)
 
@@ -196,8 +200,8 @@ class CustomDataLoader(Dataset):
 exp_title = "TESTING"  # 실험 이름
 batch_size = 10  # Mini-batch size
 num_epochs = 10
-learning_rate = 0.001
-num_workers = 0
+learning_rate = 0.0001
+num_workers = 2
 
 # train.json / validation.json / test.json 디렉토리 설정
 train_path = dataset_path + "/train.json"
@@ -232,7 +236,8 @@ val_loader = torch.utils.data.DataLoader(
     collate_fn=collate_fn,
 )
 
-torch.set_printoptions(precision=4, sci_mode=False)
+np.set_printoptions(6, suppress=True)
+torch.set_printoptions(precision=6, sci_mode=False)
 
 model = smp.DeepLabV3Plus(
     encoder_name="timm-skresnet18",
@@ -248,15 +253,18 @@ model = model.to(device)
 # print("output shape : ", out.size())
 
 criterion = SoftDiceLoss(apply_nonlin=nn.Softmax(dim=1))
-optim = adamp.AdamP(
+optimizer = adamp.AdamP(
     model.parameters(), lr=learning_rate, betas=(0.9, 0.999), weight_decay=1e-2
 )
+scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.5)
 
-run = wandb.init(project="important", name="PC")
+run = wandb.init(project="important", name="save_new_miou")
 
 for epoch in range(num_epochs):
+
+    model.train()
     for step, (images, masks, _) in enumerate(train_loader):
-        optim.zero_grad()
+        optimizer.zero_grad()
 
         images = torch.stack(images).to(device)  # (batch, channel, height, width)
         masks = torch.stack(masks).long().to(device)  # (batch, channel, height, width)
@@ -265,7 +273,7 @@ for epoch in range(num_epochs):
         loss, sum_cls = criterion(outputs, masks)
 
         loss.backward()
-        optim.step()
+        optimizer.step()
 
         # wandb
         c0 = sum_cls[0]
@@ -296,17 +304,18 @@ for epoch in range(num_epochs):
                 "c9": c9,
                 "c10": c10,
                 "c11": c11,
+                "step": step,
                 "epoch": epoch,
             }
         )
 
     print(f"end train_epoch {epoch}")
 
-    miou_all = []
-    for step, (images, masks, _) in enumerate(val_loader):
-
-        with torch.no_grad():
-            # hist = np.zeros((12, 12))
+    # miou_all = []
+    model.eval()
+    hist = np.zeros((12, 12))
+    with torch.no_grad():
+        for step, (images, masks, _) in enumerate(val_loader):
 
             images = torch.stack(images).to(device)  # (batch, channel, height, width)
             masks = (
@@ -318,11 +327,19 @@ for epoch in range(num_epochs):
 
             outputs = torch.argmax(outputs.squeeze(), dim=1).detach().cpu().numpy()
 
-            # hist = add_hist(hist, masks.detach().cpu().numpy(), outputs, n_class=12)
+            hist = add_hist(hist, masks.detach().cpu().numpy(), outputs, n_class=12)
 
             # miou 저장
-            miou_list = get_miou(masks.detach().cpu().numpy(), outputs, n_class=12)
-            miou_all.extend(miou_list)
+            # miou_list = get_miou(masks.detach().cpu().numpy(), outputs, n_class=12)
+            # miou_all.extend(miou_list)
 
-    mIou = np.nanmean(miou_all)
-    wandb.log({"VAL_MIOU": mIou, "epoch": epoch})
+    print(hist)
+    _, _, miou, _ = label_accuracy_score(hist)
+
+    # miou = np.nanmean(miou_all)
+
+    scheduler.step()
+
+    wandb.log({"VAL_MIOU": miou, "lr": optimizer.get_lr(), "epoch": epoch})
+
+    torch.save(model.state_dict(), f"/opt/ml/p3-ims-obd-eagle-eye/experiment/jiyoung/exp/checkp_{epoch}")
