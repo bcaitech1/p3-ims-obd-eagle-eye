@@ -145,3 +145,10 @@ output/
 
 # wandb
 wandb/
+
+# ide
+.vscode
+# pretrain
+pretrained/
+# notepad
+notepad.py
