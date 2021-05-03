@@ -52,13 +52,13 @@ _train_transform = [
 
 _valid_transform = [
     A.Resize(256, 256),
-    A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+    A.Normalize(mean=(0.4611, 0.4403, 0.4193), std=(0.2107, 0.2074, 0.2157)),
     ToTensorV2(),
 ]
 
 _test_transform = [
     A.Resize(256, 256),
-    A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+    A.Normalize(mean=(0.4611, 0.4403, 0.4193), std=(0.2107, 0.2074, 0.2157)),
     ToTensorV2(),
 ]
 
