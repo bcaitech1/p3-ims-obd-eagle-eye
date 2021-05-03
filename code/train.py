@@ -139,29 +139,29 @@ def run(args, model, criterion, optimizer, dataloader, fold, scheduler=None):
 
         if args.CHECKPOINT and not ((epoch + 1) % args.CHECKPOINT):
             if args.KFOLD > 1:
-                path = f"{args.CHECKPOINT_PATH}/{args.MODEL}_{args.ENCODER}_fold_{fold+1}_epoch_{epoch+1}_miou_{mIoU_score:.3f}.pt"
+                path = f"{args.CHECKPOINT_PATH}/{args.MODEL}_{args.ENCODER}_fold_{fold+1}_epoch_{epoch+1}_lb_miou_{lb_miou:.3f}.pt"
             else:
-                path = f"{args.CHECKPOINT_PATH}/{args.MODEL}_{args.ENCODER}_epoch_{epoch+1}_miou_{mIoU_score:.3f}.pt"
+                path = f"{args.CHECKPOINT_PATH}/{args.MODEL}_{args.ENCODER}_epoch_{epoch+1}_lb_miou_{lb_miou:.3f}.pt"
             torch.save(
                 {
                     "epoch": epoch,
                     "model_state_dict": model.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
                     "valid_loss": valid_loss,
-                    "mIoU": mIoU_score,
+                    "mIoU": lb_miou,
                 },
                 path,
             )
             print(f"Save the checkpoint at {path}")
 
         print(
-            f"epoch:{epoch+1}/{args.EPOCHS} train_loss: {train_loss:.4f} valid_loss: {valid_loss:.4f} mIoU: {mIoU_score:.4f}"
+            f"epoch:{epoch+1}/{args.EPOCHS} train_loss: {train_loss:.4f} valid_loss: {valid_loss:.4f} lb_miou: {lb_miou:.4f} miou: {miou:.4f}"
         )
 
-        if mIoU_score > best_mIoU_score:
+        if lb_miou > best_mIoU_score:
             print(f"Best performance at epoch: {epoch + 1}")
             print("Save model in", args.MODEL_PATH)
-            best_mIoU_score = mIoU_score
+            best_mIoU_score = lb_miou
             save_model(model, args.MODEL_PATH)
 
 
