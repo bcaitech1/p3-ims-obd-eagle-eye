@@ -111,6 +111,7 @@ def evaluate(args, model, criterions, dataloader):
     return (epoch_loss / len(dataloader)), mIoU
 
 
+
 def run(args, model, criterion, optimizer, dataloader, fold, scheduler=None):
     best_mIoU_score = 0.0
 

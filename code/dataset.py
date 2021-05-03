@@ -29,9 +29,11 @@ import seaborn as sns
 
 sns.set()
 
+
 from utils import seed_everything
 
 seed_everything(21)
+
 
 # train.json / validation.json / test.json 디렉토리 설정
 # dataset_path = "./input/data"
@@ -40,6 +42,25 @@ train_path = dataset_path + "/train.json"
 val_path = dataset_path + "/val.json"
 all_path = dataset_path + "/train_all.json"
 test_path = dataset_path + "/test.json"
+
+# augmentations
+_train_transform = [
+    A.Resize(256, 256),
+    A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+    ToTensorV2(),
+]
+
+_valid_transform = [
+    A.Resize(256, 256),
+    A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+    ToTensorV2(),
+]
+
+_test_transform = [
+    A.Resize(256, 256),
+    A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+    ToTensorV2(),
+]
 
 
 def get_classname(classID, cats):
@@ -81,7 +102,7 @@ class CustomDataLoader(Dataset):
         # cv2 를 활용하여 image 불러오기
         images = cv2.imread(os.path.join(dataset_path, image_infos["file_name"]))
         images = cv2.cvtColor(images, cv2.COLOR_BGR2RGB).astype(np.float32)
-        images /= 255.0
+        # images /= 255.0
 
         if self.mode in ("train", "val"):
             ann_ids = self.coco.getAnnIds(imgIds=image_infos["id"])
@@ -138,27 +159,34 @@ def get_dataloader(batch_size=20, fold_index=None):
     Returns:
         (train_loader, val_loader)
     """
-    train_transform = A.Compose([
-        # A.Resize(256,256),
-        ToTensorV2()])
-
-    val_transform = A.Compose([
-        # A.Resize(256,256),
-        ToTensorV2()])
+    train_transform = A.Compose(_train_transform)
+    val_transform = A.Compose(_valid_transform)
 
     if fold_index:
         # Kfold
-        dataset = CustomDataLoader(data_dir=all_path, mode='train', transform=train_transform)
+        dataset = CustomDataLoader(
+            data_dir=all_path, mode="train", transform=train_transform
+        )
 
-        train_subsampler = SubsetRandomSampler(fold_index[0]) # train_index sampler
-        val_subsampler = SubsetRandomSampler(fold_index[1]) # val_index sampler
+        train_subsampler = SubsetRandomSampler(fold_index[0])  # train_index sampler
+        val_subsampler = SubsetRandomSampler(fold_index[1])  # val_index sampler
 
         train_loader = DataLoader(
-            dataset, batch_size=batch_size, sampler=train_subsampler,
-            num_workers=4, collate_fn=collate_fn, drop_last=True)
+            dataset,
+            batch_size=batch_size,
+            sampler=train_subsampler,
+            num_workers=4,
+            collate_fn=collate_fn,
+            drop_last=True,
+        )
         val_loader = DataLoader(
-            dataset, batch_size=batch_size, sampler=val_subsampler, 
-            num_workers=4, collate_fn=collate_fn, drop_last=True)
+            dataset,
+            batch_size=batch_size,
+            sampler=val_subsampler,
+            num_workers=4,
+            collate_fn=collate_fn,
+            drop_last=True,
+        )
 
     else:
         # Hold Out
@@ -192,8 +220,8 @@ def get_dataloader(batch_size=20, fold_index=None):
     return train_loader, val_loader
 
 
-def get_testloader(batch_size = 20):
-    test_transform = A.Compose([ToTensorV2()])
+def get_testloader(batch_size=20):
+    test_transform = A.Compose(_test_transform)
 
     # test dataset
     test_dataset = CustomDataLoader(
@@ -209,7 +237,7 @@ def get_testloader(batch_size = 20):
 
     return test_loader
 
+
 if __name__ == "__main__":
     pass
 
-    
