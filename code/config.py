@@ -12,6 +12,8 @@ def get_args():
     parser.add_argument("--SCHEDULER", default=None, type=str)
     parser.add_argument("--OPTIMIZER", default="AdamP", type=str)
     parser.add_argument("--KFOLD", default=1, type=int)
+    parser.add_argument("--CHECKPOINT", default=None, type=int)
+    parser.add_argument("--LOG_INTERVAL", default=25, type=int)
 
     # parser.add_argument("--MODEL", default=None, type=str)
     parser.add_argument("--MODEL", default="DeepLabV3Plus", type=str)
@@ -19,6 +21,7 @@ def get_args():
 
     parser.add_argument("--FILE_NAME", default="Segmentation", type=str)
     parser.add_argument("--MODEL_PATH", default="/opt/ml/code/saved", type=str)
+    parser.add_argument("--CHECKPOINT_PATH", default="/opt/ml/checkpoints", type=str)
 
     args = parser.parse_args()
 

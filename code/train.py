@@ -49,7 +49,7 @@ def train(
         loss.backward()
 
         optimizer.step()
-        if (step + 1) % 2 == 0:
+        if (step + 1) % args.LOG_INTERVAL == 0:
             current_lr = get_lr(optimizer)
             print(
                 "Epoch [{}/{}], Step [{}/{}], Loss: {:.4f} lr: {}".format(
@@ -111,7 +111,8 @@ def evaluate(args, model, criterions, dataloader):
     return (epoch_loss / len(dataloader)), mIoU
 
 
-def run(args, model, criterion, optimizer, dataloader, scheduler=None):
+
+def run(args, model, criterion, optimizer, dataloader, fold, scheduler=None):
     best_mIoU_score = 0.0
 
     train_loader, val_loader = dataloader
@@ -135,6 +136,23 @@ def run(args, model, criterion, optimizer, dataloader, scheduler=None):
             wandb.log(
                 {"train_loss": train_loss, "valid_loss": valid_loss, "mIoU": mIoU_score}
             )
+
+        if args.CHECKPOINT and not ((epoch + 1) % args.CHECKPOINT):
+            if args.KFOLD > 1:
+                path = f"{args.CHECKPOINT_PATH}/{args.MODEL}_{args.ENCODER}_fold_{fold+1}_epoch_{epoch+1}_miou_{mIoU_score:.3f}.pt"
+            else:
+                path = f"{args.CHECKPOINT_PATH}/{args.MODEL}_{args.ENCODER}_epoch_{epoch+1}_miou_{mIoU_score:.3f}.pt"
+            torch.save(
+                {
+                    "epoch": epoch,
+                    "model_state_dict": model.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
+                    "valid_loss": valid_loss,
+                    "mIoU": mIoU_score,
+                },
+                path,
+            )
+            print(f"Save the checkpoint at {path}")
 
         print(
             f"epoch:{epoch+1}/{args.EPOCHS} train_loss: {train_loss:.4f} valid_loss: {valid_loss:.4f} mIoU: {mIoU_score:.4f}"
@@ -167,7 +185,7 @@ def main(args):
         # 재사용위해 args 복사
         args_origin = copy.deepcopy(args)
 
-    for i in range(args.KFOLD):
+    for fold in range(args.KFOLD):
         # hold-out, kfold에 따라서 dataloader 다르게 설정
         if args.KFOLD > 1:
             # wandb
@@ -175,18 +193,18 @@ def main(args):
                 args = copy.deepcopy(args_origin)
                 path_pair = args_origin.MODEL_PATH.split(".")
                 args.MODEL_PATH = (
-                    path_pair[0] + f"/kfold_{i+1}." + path_pair[1]
+                    path_pair[0] + f"/kfold_{fold+1}." + path_pair[1]
                 )  # MODEL_PATH 변경
                 wandb.init(
                     project=os.environ.get("WANDB_PROJECT_NAME"),
-                    name=run_name + f"_k{i+1}",
+                    name=run_name + f"_k{fold+1}",
                     config=args,
                     reinit=True,
                 )
                 args = wandb.config
             # dataloader
             dataloader = get_dataloader(args.BATCH_SIZE, fold_index=next(index_gen))
-            print(f"\nfold {i+1} start")
+            print(f"\nfold {fold+1} start")
         else:
             # wandb
             if WANDB:
@@ -227,7 +245,7 @@ def main(args):
         # optimizer = optim.Adam(params = model.parameters(), lr = args.LEARNING_RATE, weight_decay=1e-6)
 
         print("Run")
-        run(args, model, criterion, optimizer, dataloader, scheduler)
+        run(args, model, criterion, optimizer, dataloader, fold, scheduler)
 
 
 def get_lr(optimizer):
