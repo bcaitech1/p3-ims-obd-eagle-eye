@@ -29,9 +29,11 @@ import seaborn as sns
 
 sns.set()
 
+
 from utils import seed_everything
 
 seed_everything(21)
+
 
 # train.json / validation.json / test.json 디렉토리 설정
 # dataset_path = "./input/data"
@@ -54,7 +56,11 @@ _valid_transform = [
     ToTensorV2(),
 ]
 
-_test_transform = [ToTensorV2()]
+_test_transform = [
+    A.Resize(256, 256),
+    A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+    ToTensorV2(),
+]
 
 
 def get_classname(classID, cats):
