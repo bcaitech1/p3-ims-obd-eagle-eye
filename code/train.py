@@ -73,7 +73,7 @@ def evaluate(args, model, criterions, dataloader):
     n_class = 12
     with torch.no_grad():
         hist = np.zeros((n_class, n_class))
-        miou_all = []
+        miou_images = []
         for images, masks, _ in dataloader:
 
             images = torch.stack(images)  # (batch, channel, height, width)
@@ -97,18 +97,18 @@ def evaluate(args, model, criterions, dataloader):
                 hist, masks.detach().cpu().numpy(), outputs, n_class=n_class
             )
 
-            # miou 저장
+            # 이미지별 miou 저장
             miou_list = get_miou(masks.detach().cpu().numpy(), outputs, n_class=n_class)
-            miou_all.extend(miou_list)
+            miou_images.extend(miou_list)
 
-        acc, acc_cls, mIoU, fwavacc = label_accuracy_score(hist)
+        # metrics
+        acc, acc_cls, miou, fwavacc = label_accuracy_score(hist)
 
-        # TODO 아래 miou 사용 확정시 label_accuracy_score 수정 필요
-        # 새로운 miou 사용
-        mIou = np.nanmean(miou_all)
+        # 리더보드 miou
+        lb_miou = np.nanmean(miou_images)
 
         print(f"acc:{acc:.4f}, acc_cls:{acc_cls:.4f}, fwavacc:{fwavacc:.4f}")
-    return (epoch_loss / len(dataloader)), mIoU
+    return (epoch_loss / len(dataloader)), lb_miou, miou
 
 
 
@@ -130,11 +130,11 @@ def run(args, model, criterion, optimizer, dataloader, fold, scheduler=None):
             scheduler,
         )
 
-        valid_loss, mIoU_score = evaluate(args, model, criterion, val_loader)
+        valid_loss, lb_miou, miou = evaluate(args, model, criterion, val_loader)
 
         if WANDB:
             wandb.log(
-                {"train_loss": train_loss, "valid_loss": valid_loss, "mIoU": mIoU_score}
+                {"train_loss": train_loss, "valid_loss": valid_loss, "lb_miou": lb_miou, "miou": miou}
             )
 
         if args.CHECKPOINT and not ((epoch + 1) % args.CHECKPOINT):
