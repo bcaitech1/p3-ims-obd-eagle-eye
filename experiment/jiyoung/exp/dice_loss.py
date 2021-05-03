@@ -42,7 +42,7 @@ class SoftDiceLoss(nn.Module):
 
         tp, fp, fn = get_tp_fp_fn(x, y, axes, loss_mask, self.square)
 
-        dc = (2 * tp + self.smooth) / ((2 * tp) + (0.8 * fp) + (0.2 * fn) + self.smooth)
+        dc = (2 * tp + self.smooth) / ((2 * tp) + (0.7 * fp) + (0.3 * fn) + self.smooth)
 
         if not self.do_bg:
             if self.batch_dice:

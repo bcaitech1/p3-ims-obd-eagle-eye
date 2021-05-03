@@ -137,18 +137,27 @@ class CustomDataLoader(Dataset):
             masks = np.zeros(
                 (12, image_infos["height"], image_infos["width"]), dtype=np.ubyte
             )
+            max_masks = np.zeros((image_infos["height"], image_infos["width"]))
+
             masks[0] = 1
             existed_class = set([0])
             # Unknown = 1, General trash = 2, ... , Cigarette = 11
             for i in range(len(anns)):
                 className = get_classname(anns[i]["category_id"], cats)
                 class_index = category_names.index(className)
-                masks[class_index] = self.coco.annToMask(anns[i])
-                masks[0] = (masks[0] == 1) | (masks[class_index] == 1)
+                coco_mask = self.coco.annToMask(anns[i])
 
+                # dice 용
+                masks[class_index] = coco_mask
+                masks[0] = (masks[0] == 1) & (masks[class_index] != 1)
                 existed_class.add(class_index)
 
+                # ce 용
+                max_masks = np.maximum(coco_mask * class_index, max_masks)
+
+
             masks = masks.astype(np.float32)
+            max_masks = torch.from_numpy(max_masks)
 
             # transform -> albumentations 라이브러리 활용
             if self.transform is not None:
@@ -156,7 +165,7 @@ class CustomDataLoader(Dataset):
                 images = transformed["image"]
                 masks = transformed["mask"]
 
-            return images, masks, image_infos, list(existed_class)
+            return images, masks, image_infos, max_masks, list(existed_class)
 
         elif self.mode in ("val"):
             ann_ids = self.coco.getAnnIds(imgIds=image_infos["id"])
@@ -200,9 +209,9 @@ class CustomDataLoader(Dataset):
 
 # ----------------------------------------------------
 # TODO
-exp_title = "all_class"  # 실험 이름
+exp_title = "dc100_lr00003_withBack"  # 실험 이름
 batch_size = 10  # Mini-batch size
-num_epochs = 10
+num_epochs = 15
 learning_rate = 0.00003
 num_workers = 2
 
@@ -249,6 +258,8 @@ model = smp.DeepLabV3Plus(
 )
 
 # model = FCN8s(num_classes=12)
+# checkpoint = torch.load("/opt/ml/p3-ims-obd-eagle-eye/experiment/jiyoung/exp/saved/all_class/checkp_9.pt", map_location=device)
+# model.load_state_dict(checkpoint)
 model = model.to(device)
 
 # x = torch.randn([2, 3, 512, 512]).to(device)
@@ -257,21 +268,25 @@ model = model.to(device)
 # print("output shape : ", out.size())
 
 criterion = SoftDiceLoss(apply_nonlin=nn.Softmax(dim=1))
+cross_en = nn.CrossEntropyLoss()
+
 optimizer = adamp.AdamP(
     model.parameters(), lr=learning_rate, betas=(0.9, 0.999), weight_decay=1e-2
 )
-scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.5)
 
+scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=3)
 run = wandb.init(project="important", name=exp_title)
 
 for epoch in range(num_epochs):
 
     model.train()
-    for step, (images, masks, _, existed_class) in enumerate(train_loader):
+    for step, (images, masks, _, max_masks, existed_class) in enumerate(train_loader):
         optimizer.zero_grad()
 
         images = torch.stack(images).to(device)  # (batch, channel, height, width)
         masks = torch.stack(masks).long().to(device)  # (batch, channel, height, width)
+        # max_masks = torch.stack(max_masks).long().to(device)  # (batch, channel, height, width)
+    
 
         outputs = model(images)
 
@@ -282,22 +297,33 @@ for epoch in range(num_epochs):
         #     loss, _ = criterion(each_out, each_mask)
         #     batch_loss += loss / images.size(0)
 
-        loss, _ = criterion(outputs, masks)
 
+        # cross_loss = cross_en(outputs, max_masks)
+        
+        dice_loss, _ = criterion(outputs, masks)
+        # loss.backward()
+
+        
+        # multi_loss = 0.7 * dice_loss + 0.3 * cross_loss
+        multi_loss = dice_loss
+        multi_loss.backward()
+        
         # batch_loss.backward()
 
-        loss.backward()
         optimizer.step()
 
         # wandb
 
         wandb.log(
             {
-                "batch_loss": batch_loss.item(),
+                "batch_loss": multi_loss.item(),
                 "step": step,
                 "epoch": epoch,
             }
         )
+
+    # annealing
+    # scheduler.step()
 
     print(f"end train_epoch {epoch}")
 
