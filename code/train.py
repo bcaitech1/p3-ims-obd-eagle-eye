@@ -240,6 +240,10 @@ def main(args):
             run_name = args.MODEL
 
     if args.KFOLD > 1:
+        if args.KFOLD != 5:
+            print("Only 5 KFOLD is available")
+            return
+        
         # pt 저장 폴더 생성
         path_pair = args.MODEL_PATH.split(".")
         os.makedirs(path_pair[0], exist_ok=True)
