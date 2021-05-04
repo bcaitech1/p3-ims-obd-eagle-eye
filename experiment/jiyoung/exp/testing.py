@@ -3,6 +3,7 @@ import random
 import time
 import json
 import warnings
+import argparse
 
 warnings.filterwarnings("ignore")
 
@@ -31,6 +32,8 @@ from vgg16 import FCN8s
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 from dice_loss import SoftDiceLoss
+from datetime import datetime, timedelta
+
 
 import wandb
 
@@ -155,7 +158,6 @@ class CustomDataLoader(Dataset):
                 # ce 용
                 max_masks = np.maximum(coco_mask * class_index, max_masks)
 
-
             masks = masks.astype(np.float32)
             max_masks = torch.from_numpy(max_masks)
 
@@ -207,13 +209,23 @@ class CustomDataLoader(Dataset):
         return len(self.coco.getImgIds())
 
 
+parser = argparse.ArgumentParser(description="Semantic Segmentation!!!")
+parser.add_argument("--BATCH_SIZE", default=16, type=int)
+parser.add_argument("--LEARNING_RATE", default=0.0001, type=float)
+parser.add_argument("--SCHEDULER", default="Reduce_lr", type=str)
+parser.add_argument("--dc_weight", default=0.7, type=float)
+
+args = parser.parse_args()
+
+now = datetime.now() + timedelta(hours=9)
+args.now = now.strftime("%Y%m%d_%H%M")
 # ----------------------------------------------------
 # TODO
 exp_title = "dc100_lr00003_withBack"  # 실험 이름
-batch_size = 10  # Mini-batch size
-num_epochs = 15
-learning_rate = 0.00003
-num_workers = 2
+batch_size = args.BATCH_SIZE  # Mini-batch size
+num_epochs = 10
+learning_rate = args.LEARNING_RATE
+num_workers = 0
 
 
 # train.json / validation.json / test.json 디렉토리 설정
@@ -253,7 +265,7 @@ np.set_printoptions(4, suppress=True)
 torch.set_printoptions(precision=4, sci_mode=False)
 
 model = smp.DeepLabV3Plus(
-    encoder_name="timm-skresnet18",
+    encoder_name="se_resnext101_32x4d",
     classes=12,
 )
 
@@ -267,15 +279,22 @@ model = model.to(device)
 # out = model(x).to(device)
 # print("output shape : ", out.size())
 
-criterion = SoftDiceLoss(apply_nonlin=nn.Softmax(dim=1))
+criterion = SoftDiceLoss(apply_nonlin=nn.Softmax(dim=1), do_bg=True)
 cross_en = nn.CrossEntropyLoss()
 
 optimizer = adamp.AdamP(
     model.parameters(), lr=learning_rate, betas=(0.9, 0.999), weight_decay=1e-2
 )
 
-scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=3)
-run = wandb.init(project="important", name=exp_title)
+if args.SCHEDULER == "Reduce_lr":
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, factor=0.1, patience=1
+    )
+elif args.SCHEDULER == "cosine_lr":
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=3)
+
+# run = wandb.init(project="important")
+run = wandb.init()
 
 for epoch in range(num_epochs):
 
@@ -285,8 +304,9 @@ for epoch in range(num_epochs):
 
         images = torch.stack(images).to(device)  # (batch, channel, height, width)
         masks = torch.stack(masks).long().to(device)  # (batch, channel, height, width)
-        # max_masks = torch.stack(max_masks).long().to(device)  # (batch, channel, height, width)
-    
+        max_masks = (
+            torch.stack(max_masks).long().to(device)
+        )  # (batch, channel, height, width)
 
         outputs = model(images)
 
@@ -297,18 +317,14 @@ for epoch in range(num_epochs):
         #     loss, _ = criterion(each_out, each_mask)
         #     batch_loss += loss / images.size(0)
 
+        cross_loss = cross_en(outputs, max_masks)
 
-        # cross_loss = cross_en(outputs, max_masks)
-        
         dice_loss, _ = criterion(outputs, masks)
         # loss.backward()
 
-        
-        # multi_loss = 0.7 * dice_loss + 0.3 * cross_loss
-        multi_loss = dice_loss
+        # www = torch.tensor()
+        multi_loss = args.dc_weight * dice_loss + (1 - args.dc_weight) * cross_loss
         multi_loss.backward()
-        
-        # batch_loss.backward()
 
         optimizer.step()
 
@@ -329,6 +345,7 @@ for epoch in range(num_epochs):
 
     miou_all = []
     model.eval()
+    best_score = 0.0
     hist = np.zeros((12, 12))
     with torch.no_grad():
         for step, (images, masks, _) in enumerate(val_loader):
@@ -350,21 +367,25 @@ for epoch in range(num_epochs):
             miou_all.extend(miou_list)
 
     print(hist)
-    _, _, real_miou, _ = label_accuracy_score(hist)
+    _, _, miou, _ = label_accuracy_score(hist)
 
     lb_miou = np.nanmean(miou_all)
 
-    # scheduler.step()
+    if args.SCHEDULER == "Reduce_lr":
+        scheduler.step(1 - miou)
+    elif args.SCHEDULER == "cosine_lr":
+        scheduler.step()
 
     wandb.log(
-        {"lb_miou": lb_miou, "real_miou": real_miou, "lr": get_lr(optimizer), "epoch": epoch}
+        {"lb_miou": lb_miou, "miou": miou, "lr": get_lr(optimizer), "epoch": epoch}
     )
 
-    os.makedirs(
-        f"/opt/ml/p3-ims-obd-eagle-eye/experiment/jiyoung/exp/saved/{exp_title}",
-        exist_ok=True,
-    )
-    torch.save(
-        model.state_dict(),
-        f"/opt/ml/p3-ims-obd-eagle-eye/experiment/jiyoung/exp/saved/{exp_title}/checkp_{epoch}.pt",
-    )
+    if miou > best_score:
+        os.makedirs(
+            f"/opt/ml/p3-ims-obd-eagle-eye/experiment/jiyoung/exp/saved/{args.now}",
+            exist_ok=True,
+        )
+        torch.save(
+            model.state_dict(),
+            f"/opt/ml/p3-ims-obd-eagle-eye/experiment/jiyoung/exp/saved/{args.now}/best.pt",
+        )
