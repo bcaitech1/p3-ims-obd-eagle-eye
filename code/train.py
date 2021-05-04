@@ -118,7 +118,7 @@ def evaluate(args, model, criterions, dataloader):
     example_images = []
     with torch.no_grad():
         hist = np.zeros((n_class, n_class))
-        miou_all = []
+        miou_images = []
         for images, masks, _ in dataloader:
 
             images = torch.stack(images)  # (batch, channel, height, width)
@@ -155,18 +155,18 @@ def evaluate(args, model, criterions, dataloader):
                 hist, masks.detach().cpu().numpy(), outputs, n_class=n_class
             )
 
-            # miou 저장
+            # 이미지별 miou 저장
             miou_list = get_miou(masks.detach().cpu().numpy(), outputs, n_class=n_class)
-            miou_all.extend(miou_list)
+            miou_images.extend(miou_list)
 
-        acc, acc_cls, mIoU, fwavacc = label_accuracy_score(hist)
+        # metrics
+        acc, acc_cls, miou, fwavacc = label_accuracy_score(hist)
 
-        # TODO 아래 miou 사용 확정시 label_accuracy_score 수정 필요
-        # 새로운 miou 사용
-        mIou = np.nanmean(miou_all)
+        # 리더보드 miou
+        lb_miou = np.nanmean(miou_images)
 
         print(f"acc:{acc:.4f}, acc_cls:{acc_cls:.4f}, fwavacc:{fwavacc:.4f}")
-    return (epoch_loss / len(dataloader)), mIoU, example_images
+    return (epoch_loss / len(dataloader)), lb_miou, miou, example_images
 
 
 def run(args, model, criterion, optimizer, dataloader, fold, scheduler=None):
@@ -187,18 +187,11 @@ def run(args, model, criterion, optimizer, dataloader, fold, scheduler=None):
             scheduler,
         )
 
-        valid_loss, mIoU_score, example_images = evaluate(
-            args, model, criterion, val_loader
-        )
+        valid_loss, lb_miou, miou, example_images = evaluate(args, model, criterion, val_loader)
 
         if WANDB:
             wandb.log(
-                {
-                    "train_loss": train_loss,
-                    "valid_loss": valid_loss,
-                    "mIoU": mIoU_score,
-                    "predictions": example_images,
-                }
+                {"train_loss": train_loss, "valid_loss": valid_loss, "lb_miou": lb_miou, "miou": miou, "predictions" : example_images}
             )
 
         if args.CHECKPOINT and not ((epoch + 1) % args.CHECKPOINT):
@@ -208,7 +201,7 @@ def run(args, model, criterion, optimizer, dataloader, fold, scheduler=None):
 
             # checkpoint 파일이름 지정
             if args.KFOLD > 1:
-                path = f"{args.CHECKPOINT_PATH}/{args.MODEL}_{args.ENCODER}_fold_{fold+1}_epoch_{epoch+1}_miou_{mIoU_score:.3f}.pt"
+                path = f"{args.CHECKPOINT_PATH}/{args.MODEL}_{args.ENCODER}_fold_{fold+1}_epoch_{epoch+1}_lb_miou_{lb_miou:.3f}.pt"
             else:
                 path = f"{args.CHECKPOINT_PATH}/{args.MODEL}_{args.ENCODER}_epoch_{epoch+1}_miou_{mIoU_score:.3f}.pt"
 
@@ -219,20 +212,20 @@ def run(args, model, criterion, optimizer, dataloader, fold, scheduler=None):
                     "model_state_dict": model.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
                     "valid_loss": valid_loss,
-                    "mIoU": mIoU_score,
+                    "mIoU": lb_miou,
                 },
                 path,
             )
             print(f"Save the checkpoint at {path}")
 
         print(
-            f"epoch:{epoch+1}/{args.EPOCHS} train_loss: {train_loss:.4f} valid_loss: {valid_loss:.4f} mIoU: {mIoU_score:.4f}"
+            f"epoch:{epoch+1}/{args.EPOCHS} train_loss: {train_loss:.4f} valid_loss: {valid_loss:.4f} lb_miou: {lb_miou:.4f} miou: {miou:.4f}"
         )
 
-        if mIoU_score > best_mIoU_score:
+        if lb_miou > best_mIoU_score:
             print(f"Best performance at epoch: {epoch + 1}")
             print("Save model in", args.MODEL_PATH)
-            best_mIoU_score = mIoU_score
+            best_mIoU_score = lb_miou
             save_model(model, args.MODEL_PATH)
 
 
