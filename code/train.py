@@ -203,7 +203,7 @@ def run(args, model, criterion, optimizer, dataloader, fold, scheduler=None):
             if args.KFOLD > 1:
                 path = f"{args.CHECKPOINT_PATH}/{args.MODEL}_{args.ENCODER}_fold_{fold+1}_epoch_{epoch+1}_lb_miou_{lb_miou:.3f}.pt"
             else:
-                path = f"{args.CHECKPOINT_PATH}/{args.MODEL}_{args.ENCODER}_epoch_{epoch+1}_miou_{mIoU_score:.3f}.pt"
+                path = f"{args.CHECKPOINT_PATH}/{args.MODEL}_{args.ENCODER}_epoch_{epoch+1}_lb_miou_{lb_miou:.3f}.pt"
 
             # CHECKPOINT_PATH에 checkpoint 저장
             torch.save(
