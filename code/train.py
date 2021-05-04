@@ -20,27 +20,29 @@ import copy
 WANDB = True
 
 category_names = [
-        "Backgroud",
-        "UNKNOWN",
-        "General trash",
-        "Paper",
-        "Paper pack",
-        "Metal",
-        "Glass",
-        "Plastic",
-        "Styrofoam",
-        "Plastic bag",
-        "Battery",
-        "Clothing",
-    ]
+    "Backgroud",
+    "UNKNOWN",
+    "General trash",
+    "Paper",
+    "Paper pack",
+    "Metal",
+    "Glass",
+    "Plastic",
+    "Styrofoam",
+    "Plastic bag",
+    "Battery",
+    "Clothing",
+]
+
 
 def denormalize_image(image, mean, std):
     img_cp = image.copy()
-    img_cp *= std 
+    img_cp *= std
     img_cp += mean
     img_cp *= 255.0
     img_cp = np.clip(img_cp, 0, 255).astype(np.uint8)
     return img_cp
+
 
 def labels():
     l = {}
@@ -48,10 +50,16 @@ def labels():
         l[i] = label
     return l
 
+
 def wb_mask(bg_img, pred_mask, true_mask):
-      return wandb.Image(bg_img, masks={
-    "prediction" : {"mask_data" : pred_mask, "class_labels" : labels()},
-    "ground truth" : {"mask_data" : true_mask, "class_labels" : labels()}})
+    return wandb.Image(
+        bg_img,
+        masks={
+            "prediction": {"mask_data": pred_mask, "class_labels": labels()},
+            "ground truth": {"mask_data": true_mask, "class_labels": labels()},
+        },
+    )
+
 
 def train(
     args, epoch, num_epochs, model, criterions, optimizer, dataloader, scheduler=None
@@ -96,7 +104,10 @@ def train(
             )
         epoch_loss += loss
     if scheduler:
-        scheduler.step()
+        if args.SCHEDULER == "Reduce_lr":
+            scheduler.step(loss)
+        else:
+            scheduler.step()
     return epoch_loss / len(dataloader)
 
 
@@ -125,12 +136,17 @@ def evaluate(args, model, criterions, dataloader):
                 loss = criterions[1](outputs, masks)
             epoch_loss += loss
 
-            inputs_np = torch.clone(images).detach().cpu().permute(0,2,3,1).numpy()
-            inputs_np = denormalize_image(inputs_np, mean=(0.4611, 0.4403, 0.4193), std=(0.2107, 0.2074, 0.2157))
+            inputs_np = torch.clone(images).detach().cpu().permute(0, 2, 3, 1).numpy()
+            inputs_np = denormalize_image(
+                inputs_np, mean=(0.4611, 0.4403, 0.4193), std=(0.2107, 0.2074, 0.2157)
+            )
 
-            example_images.append(wb_mask(inputs_np[0],
-                                pred_mask = outputs.argmax(1)[0].detach().cpu().numpy(),
-                                true_mask = masks[0].detach().cpu().numpy())
+            example_images.append(
+                wb_mask(
+                    inputs_np[0],
+                    pred_mask=outputs.argmax(1)[0].detach().cpu().numpy(),
+                    true_mask=masks[0].detach().cpu().numpy(),
+                )
             )
 
             outputs = torch.argmax(outputs.squeeze(), dim=1).detach().cpu().numpy()
@@ -150,8 +166,7 @@ def evaluate(args, model, criterions, dataloader):
         mIou = np.nanmean(miou_all)
 
         print(f"acc:{acc:.4f}, acc_cls:{acc_cls:.4f}, fwavacc:{fwavacc:.4f}")
-    return (epoch_loss / len(dataloader)), mIoU , example_images
-
+    return (epoch_loss / len(dataloader)), mIoU, example_images
 
 
 def run(args, model, criterion, optimizer, dataloader, fold, scheduler=None):
@@ -172,18 +187,32 @@ def run(args, model, criterion, optimizer, dataloader, fold, scheduler=None):
             scheduler,
         )
 
-        valid_loss, mIoU_score, example_images = evaluate(args, model, criterion, val_loader)
+        valid_loss, mIoU_score, example_images = evaluate(
+            args, model, criterion, val_loader
+        )
 
         if WANDB:
             wandb.log(
-                {"train_loss": train_loss, "valid_loss": valid_loss, "mIoU": mIoU_score, "predictions" : example_images}
+                {
+                    "train_loss": train_loss,
+                    "valid_loss": valid_loss,
+                    "mIoU": mIoU_score,
+                    "predictions": example_images,
+                }
             )
 
         if args.CHECKPOINT and not ((epoch + 1) % args.CHECKPOINT):
+            # CHECKPOINT_PATH 폴더가 존재하지 않으면 폴더를 생성
+            if not os.path.isdir(args.CHECKPOINT_PATH):
+                os.makedirs(os.path.join(args.CHECKPOINT_PATH))
+
+            # checkpoint 파일이름 지정
             if args.KFOLD > 1:
                 path = f"{args.CHECKPOINT_PATH}/{args.MODEL}_{args.ENCODER}_fold_{fold+1}_epoch_{epoch+1}_miou_{mIoU_score:.3f}.pt"
             else:
                 path = f"{args.CHECKPOINT_PATH}/{args.MODEL}_{args.ENCODER}_epoch_{epoch+1}_miou_{mIoU_score:.3f}.pt"
+
+            # CHECKPOINT_PATH에 checkpoint 저장
             torch.save(
                 {
                     "epoch": epoch,
