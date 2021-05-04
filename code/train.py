@@ -19,6 +19,39 @@ import copy
 
 WANDB = True
 
+category_names = [
+        "Backgroud",
+        "UNKNOWN",
+        "General trash",
+        "Paper",
+        "Paper pack",
+        "Metal",
+        "Glass",
+        "Plastic",
+        "Styrofoam",
+        "Plastic bag",
+        "Battery",
+        "Clothing",
+    ]
+
+def denormalize_image(image, mean, std):
+    img_cp = image.copy()
+    img_cp *= std 
+    img_cp += mean
+    img_cp *= 255.0
+    img_cp = np.clip(img_cp, 0, 255).astype(np.uint8)
+    return img_cp
+
+def labels():
+    l = {}
+    for i, label in enumerate(category_names):
+        l[i] = label
+    return l
+
+def wb_mask(bg_img, pred_mask, true_mask):
+      return wandb.Image(bg_img, masks={
+    "prediction" : {"mask_data" : pred_mask, "class_labels" : labels()},
+    "ground truth" : {"mask_data" : true_mask, "class_labels" : labels()}})
 
 def train(
     args, epoch, num_epochs, model, criterions, optimizer, dataloader, scheduler=None
@@ -71,6 +104,7 @@ def evaluate(args, model, criterions, dataloader):
     model.eval()
     epoch_loss = 0
     n_class = 12
+    example_images = []
     with torch.no_grad():
         hist = np.zeros((n_class, n_class))
         miou_images = []
@@ -91,6 +125,14 @@ def evaluate(args, model, criterions, dataloader):
                 loss = criterions[1](outputs, masks)
             epoch_loss += loss
 
+            inputs_np = torch.clone(images).detach().cpu().permute(0,2,3,1).numpy()
+            inputs_np = denormalize_image(inputs_np, mean=(0.4611, 0.4403, 0.4193), std=(0.2107, 0.2074, 0.2157))
+
+            example_images.append(wb_mask(inputs_np[0],
+                                pred_mask = outputs.argmax(1)[0].detach().cpu().numpy(),
+                                true_mask = masks[0].detach().cpu().numpy())
+            )
+
             outputs = torch.argmax(outputs.squeeze(), dim=1).detach().cpu().numpy()
 
             hist = add_hist(
@@ -108,7 +150,7 @@ def evaluate(args, model, criterions, dataloader):
         lb_miou = np.nanmean(miou_images)
 
         print(f"acc:{acc:.4f}, acc_cls:{acc_cls:.4f}, fwavacc:{fwavacc:.4f}")
-    return (epoch_loss / len(dataloader)), lb_miou, miou
+    return (epoch_loss / len(dataloader)), lb_miou, miou, example_images
 
 
 
@@ -134,7 +176,7 @@ def run(args, model, criterion, optimizer, dataloader, fold, scheduler=None):
 
         if WANDB:
             wandb.log(
-                {"train_loss": train_loss, "valid_loss": valid_loss, "lb_miou": lb_miou, "miou": miou}
+                {"train_loss": train_loss, "valid_loss": valid_loss, "lb_miou": lb_miou, "miou": miou, "predictions" : example_images}
             )
 
         if args.CHECKPOINT and not ((epoch + 1) % args.CHECKPOINT):
