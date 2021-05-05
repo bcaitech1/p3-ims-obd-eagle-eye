@@ -16,6 +16,8 @@ from evaluation import save_model
 from sklearn.model_selection import KFold
 from dataset import get_dataloader
 import copy
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 WANDB = True
 
@@ -166,6 +168,14 @@ def evaluate(args, model, criterions, dataloader):
         lb_miou = np.nanmean(miou_images)
 
         print(f"acc:{acc:.4f}, acc_cls:{acc_cls:.4f}, fwavacc:{fwavacc:.4f}")
+
+        # hist wandb에 저장
+        summa = hist.sum(1).reshape(-1,1)
+        percent = hist / summa
+        plt.figure(figsize=(10, 10))
+        sns.heatmap(percent, annot=True, fmt=".2%", annot_kws={"size": 8})
+        wandb.log({"percent_hist": wandb.Image(plt)}, commit=False)
+
     return (epoch_loss / len(dataloader)), lb_miou, miou, example_images
 
 
