@@ -210,187 +210,187 @@ class CustomDataLoader(Dataset):
         # 전체 dataset의 size를 return
         return len(self.coco.getImgIds())
 
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Semantic Segmentation!!!")
+    parser.add_argument("--BATCH_SIZE", default=14, type=int)
+    parser.add_argument("--LEARNING_RATE", default=0.00004914, type=float)
+    parser.add_argument("--SCHEDULER", default="Reduce_lr", type=str)
+    parser.add_argument("--dc_weight", default=0.3, type=float)
 
-parser = argparse.ArgumentParser(description="Semantic Segmentation!!!")
-parser.add_argument("--BATCH_SIZE", default=14, type=int)
-parser.add_argument("--LEARNING_RATE", default=0.00004914, type=float)
-parser.add_argument("--SCHEDULER", default="Reduce_lr", type=str)
-parser.add_argument("--dc_weight", default=0.3, type=float)
+    args = parser.parse_args()
 
-args = parser.parse_args()
-
-now = datetime.now() + timedelta(hours=9)
-args.now = now.strftime("%Y%m%d_%H%M")
-# ----------------------------------------------------
-# TODO
-exp_title = "Aug_helpful"  # 실험 이름
-batch_size = args.BATCH_SIZE  # Mini-batch size
-num_epochs = 15
-learning_rate = args.LEARNING_RATE
-num_workers = 2
-
-
-# train.json / validation.json / test.json 디렉토리 설정
-train_path = dataset_path + "/train.json"
-val_path = dataset_path + "/val.json"
-
-# collate_fn needs for batch
-def collate_fn(batch):
-    return tuple(zip(*batch))
+    now = datetime.now() + timedelta(hours=9)
+    args.now = now.strftime("%Y%m%d_%H%M")
+    # ----------------------------------------------------
+    # TODO
+    exp_title = "Aug_helpful"  # 실험 이름
+    batch_size = args.BATCH_SIZE  # Mini-batch size
+    num_epochs = 15
+    learning_rate = args.LEARNING_RATE
+    num_workers = 0
 
 
-train_transform = A.Compose([ToTensorV2()])
-val_transform = A.Compose([ToTensorV2()])
+    # train.json / validation.json / test.json 디렉토리 설정
+    train_path = dataset_path + "/train.json"
+    val_path = dataset_path + "/val.json"
 
-# train dataset
-train_dataset = CustomDataLoader(
-    data_dir=train_path, mode="train", transform=train_transform
-)
-train_loader = torch.utils.data.DataLoader(
-    dataset=train_dataset,
-    batch_size=batch_size,
-    shuffle=True,
-    num_workers=num_workers,
-    collate_fn=collate_fn,
-    drop_last=True
-)
-
-# validation dataset
-val_dataset = CustomDataLoader(data_dir=val_path, mode="val", transform=val_transform)
-val_loader = torch.utils.data.DataLoader(
-    dataset=val_dataset,
-    batch_size=batch_size,
-    shuffle=False,
-    num_workers=num_workers,
-    collate_fn=collate_fn,
-    drop_last=True
-)
-
-# MODEL
-model = smp.DeepLabV3Plus(
-    encoder_name="resnext101_32x4d",
-    encoder_weights="ssl",
-    classes=12,
-)
-# checkpoint = torch.load("/opt/ml/p3-ims-obd-eagle-eye/experiment/jiyoung/exp/saved/all_class/checkp_9.pt", map_location=device)
-# model.load_state_dict(checkpoint)
-model = model.to(device)
-
-# LOSS
-dice_loss = SoftDiceLoss(apply_nonlin=nn.Softmax(dim=1), do_bg=False)
-cross_loss = nn.CrossEntropyLoss()
-
-# OPTIM
-optimizer = adamp.AdamP(
-    model.parameters(), lr=learning_rate, betas=(0.9, 0.999), weight_decay=1e-2
-)
+    # collate_fn needs for batch
+    def collate_fn(batch):
+        return tuple(zip(*batch))
 
 
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-    optimizer, factor=0.1, patience=1
-)
+    train_transform = A.Compose([ToTensorV2()])
+    val_transform = A.Compose([ToTensorV2()])
+
+    # train dataset
+    train_dataset = CustomDataLoader(
+        data_dir=train_path, mode="train", transform=train_transform
+    )
+    train_loader = torch.utils.data.DataLoader(
+        dataset=train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        collate_fn=collate_fn,
+        drop_last=True
+    )
+
+    # validation dataset
+    val_dataset = CustomDataLoader(data_dir=val_path, mode="val", transform=val_transform)
+    val_loader = torch.utils.data.DataLoader(
+        dataset=val_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        collate_fn=collate_fn,
+        drop_last=True
+    )
+
+    # MODEL
+    model = smp.DeepLabV3Plus(
+        encoder_name="resnext101_32x4d",
+        encoder_weights="ssl",
+        classes=12,
+    )
+    # checkpoint = torch.load("/opt/ml/p3-ims-obd-eagle-eye/experiment/jiyoung/exp/saved/all_class/checkp_9.pt", map_location=device)
+    # model.load_state_dict(checkpoint)
+    model = model.to(device)
+
+    # LOSS
+    dice_loss = SoftDiceLoss(apply_nonlin=nn.Softmax(dim=1), do_bg=False)
+    cross_loss = nn.CrossEntropyLoss()
+
+    # OPTIM
+    optimizer = adamp.AdamP(
+        model.parameters(), lr=learning_rate, betas=(0.9, 0.999), weight_decay=1e-2
+    )
 
 
-# run = wandb.init(project="important")
-run = wandb.init()
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, factor=0.1, patience=1
+    )
 
-for epoch in range(num_epochs):
 
-    # TRAIN
-    model.train()
-    for step, (images, masks, _, max_masks, existed_class) in enumerate(train_loader):
-        optimizer.zero_grad()
+    # run = wandb.init(project="important")
+    run = wandb.init(project="important", name=exp_title, config=args)
 
-        images = torch.stack(images).to(device)  # (batch, channel, height, width)
-        masks = torch.stack(masks).long().to(device)  # (batch, channel, height, width)
-        max_masks = (
-            torch.stack(max_masks).long().to(device)
-        )  # (batch, channel, height, width)
+    for epoch in range(num_epochs):
 
-        outputs = model(images)
+        # TRAIN
+        model.train()
+        for step, (images, masks, _, max_masks, existed_class) in enumerate(train_loader):
+            optimizer.zero_grad()
 
-        # batch_loss = 0.0
-        # for i, selected in enumerate(existed_class):
-        #     each_out = outputs[i, selected]
-        #     each_mask = masks[i, selected]
-        #     loss, _ = criterion(each_out, each_mask)
-        #     batch_loss += loss / images.size(0)
+            images = torch.stack(images).to(device)  # (batch, channel, height, width)
+            masks = torch.stack(masks).long().to(device)  # (batch, channel, height, width)
+            max_masks = (
+                torch.stack(max_masks).long().to(device)
+            )  # (batch, channel, height, width)
 
-        d_loss = dice_loss(outputs, masks) # dice loss first because inplace
-        c_loss = cross_loss(outputs, max_masks)
-        
-        multi_loss = args.dc_weight * d_loss + (1 - args.dc_weight) * c_loss
-        multi_loss.backward()
+            outputs = model(images)
 
-        optimizer.step()
+            # batch_loss = 0.0
+            # for i, selected in enumerate(existed_class):
+            #     each_out = outputs[i, selected]
+            #     each_mask = masks[i, selected]
+            #     loss, _ = criterion(each_out, each_mask)
+            #     batch_loss += loss / images.size(0)
+
+            d_loss = dice_loss(outputs, masks) # dice loss first because inplace
+            c_loss = cross_loss(outputs, max_masks)
+            
+            multi_loss = args.dc_weight * d_loss + (1 - args.dc_weight) * c_loss
+            multi_loss.backward()
+
+            optimizer.step()
+
+            # wandb
+            wandb.log(
+                {
+                    "batch_loss": multi_loss.item(),
+                    "step": step,
+                    "epoch": epoch,
+                }
+            )
+
+        print(f"end train_epoch {epoch}")
+
+        # EVAL
+        model.eval()
+        best_score = 0.0
+        lb_best_score = 0.0
+        miou_all = []
+        hist = np.zeros((12, 12))
+        with torch.no_grad():
+            for step, (images, masks, _) in enumerate(val_loader):
+
+                images = torch.stack(images).to(device)  # (batch, channel, height, width)
+                masks = (torch.stack(masks).long().to(device))  # (batch, channel, height, width)
+                outputs = model(images)
+                outputs = torch.argmax(outputs.squeeze(), dim=1).detach().cpu().numpy()
+                hist = add_hist(hist, masks.detach().cpu().numpy(), outputs, n_class=12)
+                # 리더보드용 miou 저장
+                miou_list = get_miou(masks.detach().cpu().numpy(), outputs, n_class=12)
+                miou_all.extend(miou_list)
+
+        _, _, miou, _ = label_accuracy_score(hist)
+
+        lb_miou = np.nanmean(miou_all)
+        cur_lr = get_lr(optimizer)
+
+        # 스케줄러
+        if args.SCHEDULER == "Reduce_lr":
+            scheduler.step(1 - miou)
+        elif args.SCHEDULER == "cosine_lr":
+            scheduler.step()
 
         # wandb
+        summa = hist.sum(1).reshape(-1,1)
+        percent = hist / summa
+        plt.figure(figsize=(10, 10))
+        sns.heatmap(percent, annot=True, fmt=".2%", annot_kws={"size": 8})  # font size
         wandb.log(
             {
-                "batch_loss": multi_loss.item(),
-                "step": step,
+                "lb_miou": lb_miou,
+                "miou": miou,
+                "lr": cur_lr,
                 "epoch": epoch,
+                "percent_hist": wandb.Image(plt),
             }
         )
 
-    print(f"end train_epoch {epoch}")
-
-    # EVAL
-    model.eval()
-    best_score = 0.0
-    lb_best_score = 0.0
-    miou_all = []
-    hist = np.zeros((12, 12))
-    with torch.no_grad():
-        for step, (images, masks, _) in enumerate(val_loader):
-
-            images = torch.stack(images).to(device)  # (batch, channel, height, width)
-            masks = (torch.stack(masks).long().to(device))  # (batch, channel, height, width)
-            outputs = model(images)
-            outputs = torch.argmax(outputs.squeeze(), dim=1).detach().cpu().numpy()
-            hist = add_hist(hist, masks.detach().cpu().numpy(), outputs, n_class=12)
-            # 리더보드용 miou 저장
-            miou_list = get_miou(masks.detach().cpu().numpy(), outputs, n_class=12)
-            miou_all.extend(miou_list)
-
-    _, _, miou, _ = label_accuracy_score(hist)
-
-    lb_miou = np.nanmean(miou_all)
-    cur_lr = get_lr(optimizer)
-
-    # 스케줄러
-    if args.SCHEDULER == "Reduce_lr":
-        scheduler.step(1 - miou)
-    elif args.SCHEDULER == "cosine_lr":
-        scheduler.step()
-
-    # wandb
-    summa = hist.sum(1).reshape(-1,1)
-    percent = hist / summa
-    plt.figure(figsize=(10, 10))
-    sns.heatmap(percent, annot=True, fmt=".2%", annot_kws={"size": 8})  # font size
-    wandb.log(
-        {
-            "lb_miou": lb_miou,
-            "miou": miou,
-            "lr": cur_lr,
-            "epoch": epoch,
-            "percent_hist": wandb.Image(plt),
-        }
-    )
-
-    os.makedirs(
-        f"/opt/ml/p3-ims-obd-eagle-eye/experiment/jiyoung/exp/saved/{args.now}",
-        exist_ok=True,
-    )
-    if miou > best_score:
-        torch.save(
-            model.state_dict(),
-            f"/opt/ml/p3-ims-obd-eagle-eye/experiment/jiyoung/exp/saved/{args.now}/best.pt",
+        os.makedirs(
+            f"/opt/ml/p3-ims-obd-eagle-eye/experiment/jiyoung/exp/saved/{exp_title}",
+            exist_ok=True,
         )
-    if lb_miou > lb_best_score:
-        torch.save(
-            model.state_dict(),
-            f"/opt/ml/p3-ims-obd-eagle-eye/experiment/jiyoung/exp/saved/{args.now}/lb_best.pt",
-        )
+        if miou > best_score:
+            torch.save(
+                model.state_dict(),
+                f"/opt/ml/p3-ims-obd-eagle-eye/experiment/jiyoung/exp/saved/{exp_title}/best.pt",
+            )
+        if lb_miou > lb_best_score:
+            torch.save(
+                model.state_dict(),
+                f"/opt/ml/p3-ims-obd-eagle-eye/experiment/jiyoung/exp/saved/{exp_title}/lb_best.pt",
+            )
 
