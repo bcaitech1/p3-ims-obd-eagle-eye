@@ -12,6 +12,8 @@ from torch import nn
 from torch.autograd import Variable
 from torch import einsum
 import numpy as np
+import wandb
+
 
 
 class SoftDiceLoss(nn.Module):
@@ -42,7 +44,7 @@ class SoftDiceLoss(nn.Module):
 
         tp, fp, fn = get_tp_fp_fn(x, y, axes, loss_mask, self.square)
 
-        dc = (2 * tp + self.smooth) / ((2 * tp) + (0.7 * fp) + (0.3 * fn) + self.smooth)
+        dc = (2 * tp + self.smooth) / ((2 * tp) + (0.5 * fp) + (0.5 * fn) + self.smooth)
 
         if not self.do_bg:
             if self.batch_dice:
@@ -50,11 +52,9 @@ class SoftDiceLoss(nn.Module):
             else:
                 dc = dc[:, 1:]
 
-        sum_cls = dc.detach().sum(dim=0)
-
         dc = dc.mean()
 
-        return 1 - dc, sum_cls
+        return 1 - dc
 
 
 def softmax_helper(x):

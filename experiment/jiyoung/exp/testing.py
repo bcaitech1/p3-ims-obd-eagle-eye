@@ -21,6 +21,8 @@ from utils import *
 
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 # 전처리를 위한 라이브러리
 from pycocotools.coco import COCO
@@ -210,10 +212,10 @@ class CustomDataLoader(Dataset):
 
 
 parser = argparse.ArgumentParser(description="Semantic Segmentation!!!")
-parser.add_argument("--BATCH_SIZE", default=16, type=int)
-parser.add_argument("--LEARNING_RATE", default=0.0001, type=float)
+parser.add_argument("--BATCH_SIZE", default=14, type=int)
+parser.add_argument("--LEARNING_RATE", default=0.00004914, type=float)
 parser.add_argument("--SCHEDULER", default="Reduce_lr", type=str)
-parser.add_argument("--dc_weight", default=0.7, type=float)
+parser.add_argument("--dc_weight", default=0.3, type=float)
 
 args = parser.parse_args()
 
@@ -221,11 +223,11 @@ now = datetime.now() + timedelta(hours=9)
 args.now = now.strftime("%Y%m%d_%H%M")
 # ----------------------------------------------------
 # TODO
-exp_title = "dc100_lr00003_withBack"  # 실험 이름
+exp_title = "Aug_helpful"  # 실험 이름
 batch_size = args.BATCH_SIZE  # Mini-batch size
-num_epochs = 10
+num_epochs = 15
 learning_rate = args.LEARNING_RATE
-num_workers = 0
+num_workers = 2
 
 
 # train.json / validation.json / test.json 디렉토리 설정
@@ -238,6 +240,7 @@ def collate_fn(batch):
 
 
 train_transform = A.Compose([ToTensorV2()])
+val_transform = A.Compose([ToTensorV2()])
 
 # train dataset
 train_dataset = CustomDataLoader(
@@ -249,55 +252,51 @@ train_loader = torch.utils.data.DataLoader(
     shuffle=True,
     num_workers=num_workers,
     collate_fn=collate_fn,
+    drop_last=True
 )
 
 # validation dataset
-val_dataset = CustomDataLoader(data_dir=val_path, mode="val", transform=train_transform)
+val_dataset = CustomDataLoader(data_dir=val_path, mode="val", transform=val_transform)
 val_loader = torch.utils.data.DataLoader(
     dataset=val_dataset,
     batch_size=batch_size,
     shuffle=False,
     num_workers=num_workers,
     collate_fn=collate_fn,
+    drop_last=True
 )
 
-np.set_printoptions(4, suppress=True)
-torch.set_printoptions(precision=4, sci_mode=False)
-
+# MODEL
 model = smp.DeepLabV3Plus(
-    encoder_name="se_resnext101_32x4d",
+    encoder_name="resnext101_32x4d",
+    encoder_weights="ssl",
     classes=12,
 )
-
-# model = FCN8s(num_classes=12)
 # checkpoint = torch.load("/opt/ml/p3-ims-obd-eagle-eye/experiment/jiyoung/exp/saved/all_class/checkp_9.pt", map_location=device)
 # model.load_state_dict(checkpoint)
 model = model.to(device)
 
-# x = torch.randn([2, 3, 512, 512]).to(device)
-# print("input shape : ", x.shape)
-# out = model(x).to(device)
-# print("output shape : ", out.size())
+# LOSS
+dice_loss = SoftDiceLoss(apply_nonlin=nn.Softmax(dim=1), do_bg=False)
+cross_loss = nn.CrossEntropyLoss()
 
-criterion = SoftDiceLoss(apply_nonlin=nn.Softmax(dim=1), do_bg=True)
-cross_en = nn.CrossEntropyLoss()
-
+# OPTIM
 optimizer = adamp.AdamP(
     model.parameters(), lr=learning_rate, betas=(0.9, 0.999), weight_decay=1e-2
 )
 
-if args.SCHEDULER == "Reduce_lr":
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, factor=0.1, patience=1
-    )
-elif args.SCHEDULER == "cosine_lr":
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=3)
+
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+    optimizer, factor=0.1, patience=1
+)
+
 
 # run = wandb.init(project="important")
 run = wandb.init()
 
 for epoch in range(num_epochs):
 
+    # TRAIN
     model.train()
     for step, (images, masks, _, max_masks, existed_class) in enumerate(train_loader):
         optimizer.zero_grad()
@@ -317,19 +316,15 @@ for epoch in range(num_epochs):
         #     loss, _ = criterion(each_out, each_mask)
         #     batch_loss += loss / images.size(0)
 
-        cross_loss = cross_en(outputs, max_masks)
-
-        dice_loss, _ = criterion(outputs, masks)
-        # loss.backward()
-
-        # www = torch.tensor()
-        multi_loss = args.dc_weight * dice_loss + (1 - args.dc_weight) * cross_loss
+        d_loss = dice_loss(outputs, masks) # dice loss first because inplace
+        c_loss = cross_loss(outputs, max_masks)
+        
+        multi_loss = args.dc_weight * d_loss + (1 - args.dc_weight) * c_loss
         multi_loss.backward()
 
         optimizer.step()
 
         # wandb
-
         wandb.log(
             {
                 "batch_loss": multi_loss.item(),
@@ -338,54 +333,64 @@ for epoch in range(num_epochs):
             }
         )
 
-    # annealing
-    # scheduler.step()
-
     print(f"end train_epoch {epoch}")
 
-    miou_all = []
+    # EVAL
     model.eval()
     best_score = 0.0
+    lb_best_score = 0.0
+    miou_all = []
     hist = np.zeros((12, 12))
     with torch.no_grad():
         for step, (images, masks, _) in enumerate(val_loader):
 
             images = torch.stack(images).to(device)  # (batch, channel, height, width)
-            masks = (
-                torch.stack(masks).long().to(device)
-            )  # (batch, channel, height, width)
+            masks = (torch.stack(masks).long().to(device))  # (batch, channel, height, width)
             outputs = model(images)
-
-            # loss, sum_cls = criterion(outputs, masks)
-
             outputs = torch.argmax(outputs.squeeze(), dim=1).detach().cpu().numpy()
-
             hist = add_hist(hist, masks.detach().cpu().numpy(), outputs, n_class=12)
-
             # 리더보드용 miou 저장
             miou_list = get_miou(masks.detach().cpu().numpy(), outputs, n_class=12)
             miou_all.extend(miou_list)
 
-    print(hist)
     _, _, miou, _ = label_accuracy_score(hist)
 
     lb_miou = np.nanmean(miou_all)
+    cur_lr = get_lr(optimizer)
 
+    # 스케줄러
     if args.SCHEDULER == "Reduce_lr":
         scheduler.step(1 - miou)
     elif args.SCHEDULER == "cosine_lr":
         scheduler.step()
 
+    # wandb
+    summa = hist.sum(1).reshape(-1,1)
+    percent = hist / summa
+    plt.figure(figsize=(10, 10))
+    sns.heatmap(percent, annot=True, fmt=".2%", annot_kws={"size": 8})  # font size
     wandb.log(
-        {"lb_miou": lb_miou, "miou": miou, "lr": get_lr(optimizer), "epoch": epoch}
+        {
+            "lb_miou": lb_miou,
+            "miou": miou,
+            "lr": cur_lr,
+            "epoch": epoch,
+            "percent_hist": wandb.Image(plt),
+        }
     )
 
+    os.makedirs(
+        f"/opt/ml/p3-ims-obd-eagle-eye/experiment/jiyoung/exp/saved/{args.now}",
+        exist_ok=True,
+    )
     if miou > best_score:
-        os.makedirs(
-            f"/opt/ml/p3-ims-obd-eagle-eye/experiment/jiyoung/exp/saved/{args.now}",
-            exist_ok=True,
-        )
         torch.save(
             model.state_dict(),
             f"/opt/ml/p3-ims-obd-eagle-eye/experiment/jiyoung/exp/saved/{args.now}/best.pt",
         )
+    if lb_miou > lb_best_score:
+        torch.save(
+            model.state_dict(),
+            f"/opt/ml/p3-ims-obd-eagle-eye/experiment/jiyoung/exp/saved/{args.now}/lb_best.pt",
+        )
+

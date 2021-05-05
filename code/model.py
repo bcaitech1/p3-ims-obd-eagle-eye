@@ -8,12 +8,12 @@ from unet_models import UNet_3Plus
 
 
 import segmentation_models_pytorch as smp
-def get_model(model,encoder=None):
+def get_model(model, encoder=None, encoder_weights="imagenet"):
     if encoder:
         decoder_model=getattr(smp,model)
         model=decoder_model(
             encoder_name=encoder,
-            encoder_weights="imagenet",
+            encoder_weights=encoder_weights,
             in_channels=3, 
             classes=12,
         )

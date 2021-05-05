@@ -23,6 +23,19 @@ def add_hist(hist, label_trues, label_preds, n_class):
 
     return hist
 
+def cutmix(images, max_masks, cls_masks):
+    
+    lam = np.random.beta(1.0, 1.0)
+    rand_index = torch.randperm(images.size()[0]).cuda() # 배치 내 index
+    
+    bbx1, bby1, bbx2, bby2 = rand_bbox(images.size(), lam) # 자르는 영역
+    images[:, :, bbx1:bbx2, bby1:bby2] = images[rand_index, :, bbx1:bbx2, bby1:bby2] # 섞인 이미지
+    mixed_max_masks[:, :, bbx1:bbx2, bby1:bby2] = max_masks[rand_index, :, bbx1:bbx2, bby1:bby2] # 섞인 mask
+    mixed_cls_masks[:, :, bbx1:bbx2, bby1:bby2] = cls_masks[rand_index, :, bbx1:bbx2, bby1:bby2] # 섞인 클래스별 masks
+    
+    return images, mixed_max_masks, mixed_cls_masks
+
+
 
 # 출처: 강민용_T1001 캠퍼 http://boostcamp.stages.ai/competitions/28/discussion/post/256
 def _fast_hist(label_true, label_pred, n_class):
@@ -168,3 +181,34 @@ def label_accuracy_score(hist):
     fwavacc = (freq[freq > 0] * iu[freq > 0]).sum()
 
     return acc, acc_cls, mean_iu, fwavacc
+
+
+def rand_bbox(size,lam):
+    H=size[2]
+    W=size[3]
+    cut_rat=np.sqrt(1.-lam)
+    cut_w=np.int(W*cut_rat)
+    cut_h=np.int(H*cut_rat)
+
+    cx=np.random.randint(W)
+    cy=np.random.randint(H)
+
+    bbx1=np.clip(cx-cut_w//2,0,W)
+    bby1=np.clip(cy-cut_h//2,0,H)
+    bbx2=np.clip(cx+cut_w//2,0,W)
+    bby2=np.clip(cy+cut_h//2,0,H)
+
+    return bbx1, bby1,bbx2, bby2
+
+def cutmix(images, max_masks, cls_masks=None):
+    
+    lam = np.random.beta(1.0, 1.0)
+    rand_index = torch.randperm(images.size()[0]).cuda() # 배치 내 index
+    
+    bbx1, bby1, bbx2, bby2 = rand_bbox(images.size(), lam) # 자르는 영역
+    images[:, :, bbx1:bbx2, bby1:bby2] = images[rand_index, :, bbx1:bbx2, bby1:bby2] # 섞인 이미지
+    max_masks[:, bbx1:bbx2, bby1:bby2] = max_masks[rand_index, bbx1:bbx2, bby1:bby2] # 섞인 mask
+    # cls_masks[:, :, bbx1:bbx2, bby1:bby2] = cls_masks[rand_index, :, bbx1:bbx2, bby1:bby2] # 섞인 클래스별 masks
+    
+    # return images, max_masks, cls_masks
+    return images, max_masks

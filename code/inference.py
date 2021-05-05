@@ -11,7 +11,7 @@ from dataset import get_testloader
 from model import get_model
 
 def load_model(args, device):
-    model = get_model(args.model, args.encoder)
+    model = get_model(args.model, args.encoder, None)
     model_path = args.model_dir
 
     checkpoint = torch.load(model_path, map_location=device)
@@ -114,8 +114,8 @@ if __name__ == "__main__":
     ### 데이터 증강은 추후 dataset.py 수정등 할일이 있어 추후 update 예정
     # parser.add_argument('--augmentation', type=str, default=None, help='augmentation')
     parser.add_argument('--model', type=str, default='DeepLabV3Plus', help='model type (default: BaseModel)')
-    parser.add_argument('--encoder', type=str, default='resnet18', help='model type (default: BaseModel)')
-    parser.add_argument('--model_dir', type=str, default='/opt/ml/code/saved/DeepLabV3Plus_timm-efficientnet-b0_Segmentation_k1.pt')
+    parser.add_argument('--encoder', type=str, default='resnext101_32x4d', help='model type (default: BaseModel)')
+    parser.add_argument('--model_dir', type=str, default='/opt/ml/p3-ims-obd-eagle-eye/experiment/jiyoung/exp/saved/20210505_2039/lb_best.pt')
     parser.add_argument('--kfold_dir', type=str, default=None)
     parser.add_argument('--output_dir', type=str, default='./output')
     args = parser.parse_args()
