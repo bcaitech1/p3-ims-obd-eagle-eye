@@ -240,9 +240,10 @@ def main(args):
             run_name = args.MODEL
 
     if args.KFOLD > 1:
-        # kfold index 생성
-        fold_split = KFold(args.KFOLD, shuffle=True, random_state=21)
-        index_gen = iter(fold_split.split(range(3272)))  # 전체 이미지수 3272개
+        if args.KFOLD != 5:
+            print("Only 5 KFOLD is available")
+            return
+        
         # pt 저장 폴더 생성
         path_pair = args.MODEL_PATH.split(".")
         os.makedirs(path_pair[0], exist_ok=True)
@@ -252,13 +253,12 @@ def main(args):
     for fold in range(args.KFOLD):
         # hold-out, kfold에 따라서 dataloader 다르게 설정
         if args.KFOLD > 1:
+            args = copy.deepcopy(args_origin)
+            path_pair = args_origin.MODEL_PATH.split(".")
+            # MODEL_PATH 변경
+            args.MODEL_PATH = (path_pair[0] + f"/kfold_{fold+1}." + path_pair[1])
             # wandb
             if WANDB:
-                args = copy.deepcopy(args_origin)
-                path_pair = args_origin.MODEL_PATH.split(".")
-                args.MODEL_PATH = (
-                    path_pair[0] + f"/kfold_{fold+1}." + path_pair[1]
-                )  # MODEL_PATH 변경
                 wandb.init(
                     project=os.environ.get("WANDB_PROJECT_NAME"),
                     name=run_name + f"_k{fold+1}",
@@ -267,7 +267,7 @@ def main(args):
                 )
                 args = wandb.config
             # dataloader
-            dataloader = get_dataloader(args.BATCH_SIZE, fold_index=next(index_gen))
+            dataloader = get_dataloader(args.BATCH_SIZE, fold_index=fold)
             print(f"\nfold {fold+1} start")
         else:
             # wandb

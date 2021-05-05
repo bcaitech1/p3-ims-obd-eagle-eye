@@ -42,6 +42,8 @@ train_path = dataset_path + "/train.json"
 val_path = dataset_path + "/val.json"
 all_path = dataset_path + "/train_all.json"
 test_path = dataset_path + "/test.json"
+kfold_train_path = [f"{dataset_path}/train_data{i}.json" for i in range(5)]
+kfold_val_path = [f"{dataset_path}/valid_data{i}.json" for i in range(5)]
 
 # augmentations
 _train_transform = [
@@ -162,31 +164,37 @@ def get_dataloader(batch_size=20, fold_index=None):
     train_transform = A.Compose(_train_transform)
     val_transform = A.Compose(_valid_transform)
 
-    if fold_index:
+    if fold_index is not None:
         # Kfold
-        dataset = CustomDataLoader(
-            data_dir=all_path, mode="train", transform=train_transform
+        train_dataset = CustomDataLoader(
+            data_dir=kfold_train_path[fold_index], mode="train", transform=train_transform
         )
 
-        train_subsampler = SubsetRandomSampler(fold_index[0])  # train_index sampler
-        val_subsampler = SubsetRandomSampler(fold_index[1])  # val_index sampler
+        val_dataset = CustomDataLoader(
+            data_dir=kfold_val_path[fold_index], mode="val", transform=val_transform
+        )
 
-        train_loader = DataLoader(
-            dataset,
+        # 마지막 step에서 1개 남을땐 drop_last
+        drop_last = True if len(train_dataset) % batch_size == 1 else False
+
+        train_loader = torch.utils.data.DataLoader(
+            dataset=train_dataset,
             batch_size=batch_size,
-            sampler=train_subsampler,
+            shuffle=True,
             num_workers=4,
             collate_fn=collate_fn,
-            drop_last=True,
+            drop_last=drop_last
         )
-        val_loader = DataLoader(
-            dataset,
+
+        val_loader = torch.utils.data.DataLoader(
+            dataset=val_dataset,
             batch_size=batch_size,
-            sampler=val_subsampler,
+            shuffle=False,
             num_workers=4,
             collate_fn=collate_fn,
-            drop_last=True,
+            drop_last=drop_last
         )
+
 
     else:
         # Hold Out
@@ -200,6 +208,9 @@ def get_dataloader(batch_size=20, fold_index=None):
             data_dir=val_path, mode="val", transform=val_transform
         )
 
+        #마지막 step에서 1개 남을땐 drop_last
+        drop_last = True if len(train_dataset) % batch_size == 1 else False
+
         # DataLoader
         train_loader = torch.utils.data.DataLoader(
             dataset=train_dataset,
@@ -207,6 +218,7 @@ def get_dataloader(batch_size=20, fold_index=None):
             shuffle=True,
             num_workers=4,
             collate_fn=collate_fn,
+            drop_last=drop_last
         )
 
         val_loader = torch.utils.data.DataLoader(
@@ -215,6 +227,7 @@ def get_dataloader(batch_size=20, fold_index=None):
             shuffle=False,
             num_workers=4,
             collate_fn=collate_fn,
+            drop_last=drop_last
         )
 
     return train_loader, val_loader
