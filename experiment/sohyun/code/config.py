@@ -8,8 +8,8 @@ def get_args():
     parser.add_argument("--EPOCHS", default=10, type=int)
     parser.add_argument("--BATCH_SIZE", default=16, type=int)
     parser.add_argument("--LEARNING_RATE", default=0.00005, type=float)
-    parser.add_argument("--LOSS", default="smooth_cross_entropy", type=str)
-    parser.add_argument("--SCHEDULER", default="step_lr", type=str)
+    parser.add_argument("--LOSS", default="CEWithL1", type=str)
+    parser.add_argument("--SCHEDULER", default="Reduce_lr", type=str)
     parser.add_argument("--OPTIMIZER", default="AdamP", type=str)
     parser.add_argument("--KFOLD", default=5, type=int)
     parser.add_argument("--CHECKPOINT", default=1, type=int)
@@ -23,7 +23,7 @@ def get_args():
     parser.add_argument("--MODEL_PATH", default="/opt/ml/saved", type=str)
     parser.add_argument(
         "--CHECKPOINT_PATH",
-        default="/opt/ml/checkpoints/resnext101_smoothingloss",
+        default="/opt/ml/checkpoints/resnext101_pseudo_labeling",
         type=str,
     )
     parser.add_argument(

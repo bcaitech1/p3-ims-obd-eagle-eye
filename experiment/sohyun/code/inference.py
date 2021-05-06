@@ -9,13 +9,14 @@ import albumentations as A
 
 from dataset import get_testloader
 from model import get_model
+from skimage.transform import resize
 
 
 def load_model(args, device):
     model = get_model(args.model, args.encoder)
     model_path = args.model_dir
 
-    checkpoint = torch.load(model_path, map_location=device)["model_state_dict"]
+    checkpoint = torch.load(model_path, map_location=device)
     model.load_state_dict(checkpoint)
     print(f"Loaded model:{args.model}")
 
@@ -79,8 +80,9 @@ def kfold_test(args, test_loader, device):
     #
     file_name_list = []
     preds_array = np.empty((0, size * size), dtype=np.long)
+    output_256 = np.empty((0, 12, size * size), dtype=np.float)
     with torch.no_grad():
-        for imgs, image_infos in tqdm(test_loader):
+        for imgs, image_infos in test_loader:
             test_imgs = imgs
             imgs = torch.stack(imgs).to(device)
             outs_size = list(imgs.size())
@@ -95,21 +97,27 @@ def kfold_test(args, test_loader, device):
                 outs = outs.detach().cpu().numpy()
                 prob += outs
 
-            pred = np.argmax(prob, axis=1)  # soft voting
+            prob /= len(model_list)
+            prob = prob.reshape(prob.shape[0], 12, 256 * 256)
+            # print(output_256.shape, prob.shape)
+            output_256 = np.vstack((output_256, prob))
+
+            # pred = np.argmax(prob, axis=1)  # soft voting
 
             # resize (256 x 256)
-            temp = []
-            for each in pred:
-                pred = transform(image=each)["image"]
-                temp.append(pred)
-            pred = np.array(temp)
+            # temp = []
+            # for each in pred:
+            #     pred = transform(image=each)["image"]
+            #     temp.append(pred)
+            # pred = np.array(temp)
 
             # reshape
-            pred = pred.reshape([pred.shape[0], size * size]).astype(int)
+            # pred = pred.reshape([pred.shape[0], size * size]).astype(int)
 
-            preds_array = np.vstack((preds_array, pred))
+            # preds_array = np.vstack((preds_array, pred))
             file_name_list.append([i["file_name"] for i in image_infos])
 
+    np.savez("/opt/ml/output/sohyun.npz", output_256)
     file_names = [y for x in file_name_list for y in x]
     print("End prediction.")
 
@@ -137,7 +145,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model_dir", type=str, default=None,
     )
-    parser.add_argument("--kfold_dir", type=str, default="/opt/ml/kfold")
+    parser.add_argument(
+        "--kfold_dir",
+        type=str,
+        default="/opt/ml/saved/DeepLabV3Plus_resnext101_32x4d_DeeplabV3Plus",
+    )
     parser.add_argument("--output_dir", type=str, default="/opt/ml/output")
     args = parser.parse_args()
 
@@ -145,7 +157,8 @@ if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     submission = pd.read_csv(
-        "/opt/ml/code/submission/sample_submission.csv", index_col=None
+        "/opt/ml/p3-ims-obd-eagle-eye/baseline/submission/sample_submission.csv",
+        index_col=None,
     )
     test_loader = get_testloader()
 
@@ -172,7 +185,6 @@ if __name__ == "__main__":
     os.makedirs(args.output_dir, exist_ok=True)
     # submission.to_csv(os.path.join(args.output_dir, f'output_{args.model}.csv'), index=False)
     submission.to_csv(
-        os.path.join(args.output_dir, f"resnext101_kfold_labelsmoothing.csv"),
-        index=False,
+        os.path.join(args.output_dir, f"probability_extraction.csv"), index=False,
     )
     print("Finish")

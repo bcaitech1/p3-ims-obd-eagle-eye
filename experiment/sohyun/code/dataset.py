@@ -2,6 +2,7 @@ import os
 import random
 import time
 import json
+import glob
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -42,6 +43,8 @@ train_path = dataset_path + "/train.json"
 val_path = dataset_path + "/val.json"
 all_path = dataset_path + "/train_all.json"
 test_path = dataset_path + "/test.json"
+kfold_train_path = [f"{dataset_path}/train_data{i}.json" for i in range(5)]
+kfold_val_path = [f"{dataset_path}/valid_data{i}.json" for i in range(5)]
 
 # augmentations
 _train_transform = [
@@ -147,6 +150,75 @@ class CustomDataLoader(Dataset):
         return len(self.coco.getImgIds())
 
 
+class PseudoTrainset(Dataset):
+    """COCO format"""
+
+    def __init__(self, data_dir, transform=None):
+        super().__init__()
+        self.transform = transform
+        self.coco = COCO(data_dir)
+        self.dataset_path = "/opt/ml/input/data/"
+        self.category_names = [
+            "Backgroud",
+            "UNKNOWN",
+            "General trash",
+            "Paper",
+            "Paper pack",
+            "Metal",
+            "Glass",
+            "Plastic",
+            "Styrofoam",
+            "Plastic bag",
+            "Battery",
+            "Clothing",
+        ]
+
+        self.pseudo_imgs = np.load(self.dataset_path + "pseudo_imgs_path.npy")
+        self.pseudo_masks = sorted(glob.glob(self.dataset_path + "pseudo_masks/*.npy"))
+
+    def __getitem__(self, index: int):
+
+        ### Train data ###
+        if index < len(self.coco.getImgIds()):
+            image_id = self.coco.getImgIds(imgIds=index)
+            image_infos = self.coco.loadImgs(image_id)[0]
+
+            images = cv2.imread(self.dataset_path + image_infos["file_name"])
+            images = cv2.cvtColor(images, cv2.COLOR_BGR2RGB).astype(np.float32)
+            # images /= 255.0
+            ann_ids = self.coco.getAnnIds(imgIds=image_infos["id"])
+            anns = self.coco.loadAnns(ann_ids)
+            cat_ids = self.coco.getCatIds()
+            cats = self.coco.loadCats(cat_ids)
+
+            ###  mask 생성  ###
+            masks = np.zeros((image_infos["height"], image_infos["width"]))
+            for i in range(len(anns)):
+                className = get_classname(anns[i]["category_id"], cats)
+                pixel_value = self.category_names.index(className)
+                masks = np.maximum(self.coco.annToMask(anns[i]) * pixel_value, masks)
+
+        ### Pseudo data ###
+        else:
+            index -= len(self.coco.getImgIds())
+            images = cv2.imread(self.dataset_path + self.pseudo_imgs[index])
+            images = cv2.cvtColor(images, cv2.COLOR_BGR2RGB).astype(np.float32)
+            # images /= 255.0
+            masks = np.load(self.pseudo_masks[index])
+
+        ###  augmentation ###
+        masks = masks.astype(np.float32)
+        if self.transform is not None:
+            transformed = self.transform(image=images, mask=masks)
+            images = transformed["image"]
+            masks = transformed["mask"]
+
+        return images, masks
+
+    def __len__(self):
+        return len(self.coco.getImgIds()) + len(self.pseudo_imgs)
+
+
 # collate_fn needs for batch
 def collate_fn(batch):
     return tuple(zip(*batch))
@@ -165,51 +237,29 @@ def get_dataloader(batch_size=20, fold_index=None):
     train_transform = A.Compose(_train_transform)
     val_transform = A.Compose(_valid_transform)
 
-    if fold_index:
+    if fold_index is not None:
         # Kfold
-        dataset = CustomDataLoader(
-            data_dir=all_path, mode="train", transform=train_transform
-        )
+        # train_dataset = CustomDataLoader(
+        #     data_dir=kfold_train_path[fold_index],
+        #     mode="train",
+        #     transform=train_transform,
+        # )
+        train_dataset = PseudoTrainset(data_dir=train_path, transform=train_transform)
 
-        train_subsampler = SubsetRandomSampler(fold_index[0])  # train_index sampler
-        val_subsampler = SubsetRandomSampler(fold_index[1])  # val_index sampler
-
-        train_loader = DataLoader(
-            dataset,
-            batch_size=batch_size,
-            sampler=train_subsampler,
-            num_workers=2,
-            collate_fn=collate_fn,
-            drop_last=True,
-        )
-        val_loader = DataLoader(
-            dataset,
-            batch_size=batch_size,
-            sampler=val_subsampler,
-            num_workers=2,
-            collate_fn=collate_fn,
-            drop_last=True,
-        )
-
-    else:
-        # Hold Out
-        # train dataset
-        train_dataset = CustomDataLoader(
-            data_dir=train_path, mode="train", transform=train_transform
-        )
-
-        # validation dataset
         val_dataset = CustomDataLoader(
-            data_dir=val_path, mode="val", transform=val_transform
+            data_dir=kfold_val_path[fold_index], mode="val", transform=val_transform
         )
 
-        # DataLoader
+        # 마지막 step에서 1개 남을땐 drop_last
+        drop_last = True if len(train_dataset) % batch_size == 1 else False
+
         train_loader = torch.utils.data.DataLoader(
             dataset=train_dataset,
             batch_size=batch_size,
             shuffle=True,
             num_workers=2,
             collate_fn=collate_fn,
+            drop_last=drop_last,
         )
 
         val_loader = torch.utils.data.DataLoader(
@@ -218,6 +268,39 @@ def get_dataloader(batch_size=20, fold_index=None):
             shuffle=False,
             num_workers=2,
             collate_fn=collate_fn,
+            drop_last=drop_last,
+        )
+
+    else:
+        # Hold Out
+        # train dataset
+        train_dataset = PseudoTrainset(data_dir=train_path, transform=train_transform)
+
+        # validation dataset
+        val_dataset = CustomDataLoader(
+            data_dir=val_path, mode="val", transform=val_transform
+        )
+
+        # 마지막 step에서 1개 남을땐 drop_last
+        drop_last = True if len(train_dataset) % batch_size == 1 else False
+
+        # DataLoader
+        train_loader = torch.utils.data.DataLoader(
+            dataset=train_dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=2,
+            collate_fn=collate_fn,
+            drop_last=drop_last,
+        )
+
+        val_loader = torch.utils.data.DataLoader(
+            dataset=val_dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=2,
+            collate_fn=collate_fn,
+            drop_last=drop_last,
         )
 
     return train_loader, val_loader
