@@ -5,6 +5,7 @@ from SegLoss.losses_pytorch import ND_Crossentropy as NDCE
 from SegLoss.losses_pytorch import dice_loss as dice
 from SegLoss.losses_pytorch import focal_loss as focal
 from typing import Optional
+from losses import SoftCrossEntropyLoss
 
 EPS = 1e-10
 # 제공받은 코드
@@ -160,6 +161,7 @@ _criterion_entrypoints = {
     "l1": nn.L1Loss,
     # GDiceLoss를 사용하면 에러 발생
     "dice": dice.GDiceLossV2,
+    "smooth_cross_entropy": SoftCrossEntropyLoss,
     # "iou" : IOU_loss,
 }
 

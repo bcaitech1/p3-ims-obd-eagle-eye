@@ -6,24 +6,24 @@ import torch
 def get_args():
     parser = argparse.ArgumentParser(description="Semantic Segmentation!!!")
     parser.add_argument("--EPOCHS", default=10, type=int)
-    parser.add_argument("--BATCH_SIZE", default=8, type=int)
-    parser.add_argument("--LEARNING_RATE", default=0.0001, type=float)
-    parser.add_argument("--LOSS", default="CEWithL1", type=str)
-    parser.add_argument("--SCHEDULER", default="Reduce_lr", type=str)
+    parser.add_argument("--BATCH_SIZE", default=16, type=int)
+    parser.add_argument("--LEARNING_RATE", default=0.00005, type=float)
+    parser.add_argument("--LOSS", default="smooth_cross_entropy", type=str)
+    parser.add_argument("--SCHEDULER", default="step_lr", type=str)
     parser.add_argument("--OPTIMIZER", default="AdamP", type=str)
     parser.add_argument("--KFOLD", default=5, type=int)
     parser.add_argument("--CHECKPOINT", default=1, type=int)
     parser.add_argument("--LOG_INTERVAL", default=25, type=int)
 
     # parser.add_argument("--MODEL", default=None, type=str)
-    parser.add_argument("--MODEL", default="vision_deeplabv3_resnet101", type=str)
-    parser.add_argument("--ENCODER", default=None, type=str)
+    parser.add_argument("--MODEL", default="DeepLabV3Plus", type=str)
+    parser.add_argument("--ENCODER", default="resnext101_32x4d", type=str)
 
-    parser.add_argument("--FILE_NAME", default="vision_deeplabv3_resnet101", type=str)
+    parser.add_argument("--FILE_NAME", default="DeeplabV3Plus", type=str)
     parser.add_argument("--MODEL_PATH", default="/opt/ml/saved", type=str)
     parser.add_argument(
         "--CHECKPOINT_PATH",
-        default="/opt/ml/checkpoints/vision_deeplabv3_resnet101",
+        default="/opt/ml/checkpoints/resnext101_smoothingloss",
         type=str,
     )
     parser.add_argument(

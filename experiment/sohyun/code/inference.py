@@ -39,6 +39,8 @@ def test(model, test_loader, device):
 
             # inference (512 x 512)
             outs = model(torch.stack(imgs).to(device))
+            if "vision" in args.model:
+                outs = outs["out"]
             oms = torch.argmax(outs.squeeze(), dim=1).detach().cpu().numpy()
 
             # resize (256 x 256)
@@ -88,7 +90,7 @@ def kfold_test(args, test_loader, device):
             for model in model_list:
                 model.eval()
                 outs = model(imgs)
-                if "vision" in args.MODEL:
+                if "vision" in args.model:
                     outs = outs["out"]
                 outs = outs.detach().cpu().numpy()
                 prob += outs
@@ -129,15 +131,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--encoder",
         type=str,
-        default="timm-efficientnet-b0",
+        default="resnext101_32x4d",
         help="model type (default: BaseModel)",
     )
     parser.add_argument(
-        "--model_dir",
-        type=str,
-        default="/opt/ml/checkpoints/retrained/DeepLabV3Plus_timm-efficientnet-b0_epoch_63_miou_0.636.pt",
+        "--model_dir", type=str, default=None,
     )
-    parser.add_argument("--kfold_dir", type=str, default=None)
+    parser.add_argument("--kfold_dir", type=str, default="/opt/ml/kfold")
     parser.add_argument("--output_dir", type=str, default="/opt/ml/output")
     args = parser.parse_args()
 
@@ -172,6 +172,7 @@ if __name__ == "__main__":
     os.makedirs(args.output_dir, exist_ok=True)
     # submission.to_csv(os.path.join(args.output_dir, f'output_{args.model}.csv'), index=False)
     submission.to_csv(
-        os.path.join(args.output_dir, f"retrained_epoch_63.csv"), index=False
+        os.path.join(args.output_dir, f"resnext101_kfold_labelsmoothing.csv"),
+        index=False,
     )
     print("Finish")

@@ -14,7 +14,7 @@ def get_model(model, encoder=None):
     if encoder:
         decoder_model = getattr(smp, model)
         model = decoder_model(
-            encoder_name=encoder, encoder_weights="imagenet", in_channels=3, classes=12,
+            encoder_name=encoder, encoder_weights="swsl", in_channels=3, classes=12,
         )
     else:
         if model == "unet3p":

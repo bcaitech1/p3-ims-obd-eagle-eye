@@ -110,6 +110,8 @@ def train(
         #     )
         #     # compute output
         #     outputs = model(images)
+        #     if "vision" in args.MODEL:
+        #         outputs = outputs["out"]
         #     loss = criterions[1](outputs, target_a) * lam + criterions[1](
         #         outputs, target_b
         #     ) * (1.0 - lam)
@@ -257,16 +259,16 @@ def run(args, model, criterion, optimizer, dataloader, fold, scheduler=None):
             if args.KFOLD > 1:
                 path = f"{args.CHECKPOINT_PATH}/{args.MODEL}_{args.ENCODER}_fold_{fold+1}_epoch_{epoch+1}_miou_{lb_miou:.3f}.pt"
             else:
-                path = f"{args.CHECKPOINT_PATH}/{args.MODEL}_{args.ENCODER}_epoch_{epoch+1}_miou_{lb_miou:.3f}.pt"
+                path = f"{args.CHECKPOINT_PATH}/{args.MODEL}_{args.ENCODER}_epoch_{epoch+1}_lb_miou_{lb_miou:.3f}.pt"
 
             # CHECKPOINT_PATH에 checkpoint 저장
             torch.save(
                 {
                     "epoch": epoch,
                     "model_state_dict": model.state_dict(),
-                    "optimizer_state_dict": optimizer.state_dict(),
-                    "valid_loss": valid_loss,
-                    "mIoU": lb_miou,
+                    # "optimizer_state_dict": optimizer.state_dict(),
+                    # "valid_loss": valid_loss,
+                    # "mIoU": lb_miou,
                 },
                 path,
             )

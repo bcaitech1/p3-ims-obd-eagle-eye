@@ -45,20 +45,22 @@ test_path = dataset_path + "/test.json"
 
 # augmentations
 _train_transform = [
-    # A.RandomResizedCrop(256, 256),
-    # A.GaussianBlur(),
+    A.Resize(256, 256),
+    A.RandomResizedCrop(256, 256),
+    A.Resize(256, 256),
+    # A.CLAHE(),
     A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),  # imagenet
     ToTensorV2(),
 ]
 
 _valid_transform = [
-    # A.Resize(256, 256),
+    A.Resize(256, 256),
     A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ToTensorV2(),
 ]
 
 _test_transform = [
-    # A.Resize(256, 256),
+    A.Resize(256, 256),
     A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ToTensorV2(),
 ]
